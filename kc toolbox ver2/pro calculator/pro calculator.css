@@ -1,0 +1,38 @@
+.menu-bar {
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    border-right: 1px solid #333;
+}
+
+.menu-label {
+    display: flex;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.menu-label-text {
+    margin-left: 10px;
+}
+
+.menu-line {
+    flex-grow: 1;
+    height: 1px;
+    background-color: #333;
+    margin-left: 10px;
+}
+
+.bottom-label {
+    margin-top: auto;
+}
+
+.bit-keypad-toggle {
+    margin-bottom: 10px;
+}
+
+#bit-keypad {
+    display: none;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 4px;
+    margin-bottom: 10px;
+}

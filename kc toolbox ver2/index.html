@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KC Toolbox</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #111;
+            --text-color: #ffffff;
+            --accent-color: #0078d7;
+            --border-color: #333;
+            --border-glow: rgba(255, 255, 255, 0.6);
+            --surface-glow: rgba(255, 255, 255, 0.15);
+            --glow-radius: 110px;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI Light', 'Segoe UI', sans-serif;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        h1 {
+            font-weight: 300;
+            font-size: 4rem;
+            margin-bottom: 60px;
+            letter-spacing: 2px;
+            text-shadow: 0 0 20px rgba(0, 120, 215, 0.5);
+        }
+
+        .grid-container {
+            display: flex;
+            gap: 30px;
+        }
+
+        /* Metro Reveal Tile Styles */
+        .metro-tile {
+            position: relative;
+            width: 220px;
+            height: 220px;
+            background: radial-gradient(circle at var(--x) var(--y), var(--border-glow) 0%, transparent var(--glow-radius)), var(--border-color);
+            border: none;
+            color: white;
+            text-decoration: none;
+            cursor: pointer;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.5rem;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            transition: transform 0.1s;
+        }
+
+        /* The Reveal Effect (Inner Background) */
+        .metro-tile::before {
+            content: '';
+            position: absolute;
+            inset: 1px; /* Creates the border effect */
+            background: var(--bg-color);
+            z-index: 1;
+            transition: background 0.2s;
+        }
+
+        .metro-tile:hover::before {
+            background: radial-gradient(circle at var(--x) var(--y), var(--surface-glow) 0%, transparent var(--glow-radius)), var(--bg-color);
+        }
+
+        .metro-tile span, .metro-tile i {
+            position: relative;
+            z-index: 2;
+            pointer-events: none;
+        }
+
+        .metro-tile i {
+            font-size: 4rem;
+            margin-bottom: 20px;
+            color: var(--accent-color);
+            transition: text-shadow 0.3s;
+        }
+        
+        .metro-tile:hover i {
+            text-shadow: 0 0 15px var(--accent-color);
+        }
+
+        .metro-tile:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body>
+
+    <h1>KC Toolbox</h1>
+
+    <div class="grid-container">
+        <a href="pro calculator.html" class="metro-tile">
+            <i class="fas fa-calculator"></i>
+            <span>Calculator</span>
+        </a>
+        <a href="timer pro/timer pro.html" class="metro-tile">
+            <i class="fas fa-stopwatch"></i>
+            <span>Timer Pro</span>
+        </a>
+    </div>
+
+    <script>
+        document.addEventListener('mousemove', (e) => {
+            const tiles = document.querySelectorAll('.metro-tile');
+            tiles.forEach(tile => {
+                const rect = tile.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                tile.style.setProperty('--x', x + 'px');
+                tile.style.setProperty('--y', y + 'px');
+            });
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,2334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metro Calculator - Advanced</title>
+    <style>
+        :root {
+            --bg-color: #111;
+            --btn-bg: #2d2d2d;
+            --panel-color: #2d2d2d;
+            --text-color: #ffffff;
+            --accent-color: #0078d7;
+            
+            /* Glow Settings */
+            --border-glow: rgba(255, 255, 255, 0.6); 
+            --surface-glow: rgba(255, 255, 255, 0.15);
+            --glow-radius: 110px;
+            
+            --error-color: #ff4d4d;
+            --dev-border: #ffd700;
+            --console-bg: #111;
+            --console-text: #0f0;
+        }
+
+        * { box-sizing: border-box; user-select: none; -webkit-user-drag: none; }
+
+        body {
+            margin: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #111; display: flex; justify-content: center; align-items: center;
+            height: 100vh; color: var(--text-color); overflow: hidden;
+            transition: background-color 0.5s;
+        }
+
+        /* --- CONTAINER --- */
+        .app-container {
+            width: 950px; height: 720px; 
+            max-width: 100vw; max-height: 100vh;
+            background-color: var(--bg-color);
+            display: flex; box-shadow: 0 0 30px rgba(0,0,0,0.6); border: 1px solid #333;
+            position: relative; overflow: hidden;
+            opacity: 0; transform: scale(0.95);
+            transition: opacity 0.8s ease, transform 0.8s cubic-bezier(0.1, 0.8, 0.2, 1), background-color 0.3s;
+        }
+        .app-container.loaded { opacity: 1; transform: scale(1); }
+
+        /* Ambient Glow Effect on Container */
+        .app-container::before {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: radial-gradient(circle at top right, var(--accent-color), transparent 60%), radial-gradient(circle at bottom left, var(--accent-color), transparent 60%);
+            opacity: 0.1;
+            mix-blend-mode: screen;
+            z-index: 0;
+            pointer-events: none;
+        }
+
+        /* --- SIDEBAR --- */
+        .sidebar {
+            width: 50px; 
+            background-color: var(--bg-color); 
+            display: flex; flex-direction: column;
+            border-right: 1px solid #333; z-index: 20; transition: width 0.3s cubic-bezier(0.2, 0, 0, 1), background-color 0.3s;
+            overflow-x: hidden; overflow-y: auto;
+        }
+        .sidebar::-webkit-scrollbar { width: 0; }
+        .sidebar.expanded { width: 240px; }
+
+        .sidebar .nav-btn {
+            width: 100%; height: 50px; font-size: 18px; color: #aaa;
+            display: flex; align-items: center; justify-content: flex-start;
+            padding-left: 16px; position: relative; flex-shrink: 0;
+        }
+        .nav-btn i { width: 20px; text-align: center; transition: color 0.2s; }
+        .nav-label { margin-left: 15px; font-size: 0.95rem; opacity: 0; white-space: nowrap; transition: opacity 0.2s ease; pointer-events: none; }
+        .sidebar.expanded .nav-label { opacity: 1; transition-delay: 0.1s; }
+        .nav-btn.active { color: var(--accent-color); }
+        .nav-btn.active::after { content: ''; position: absolute; left: 0; top: 12px; bottom: 12px; width: 4px; background: var(--accent-color); z-index: 3; border-radius: 0; }
+        #menu-toggle { margin-bottom: 10px; height: 50px; }
+        #menu-toggle:hover { background-color: rgba(255,255,255,0.1); }
+        .nav-btn.bottom-btn { margin-top: auto; }
+
+        /* --- CONTENT --- */
+        .content { flex: 1; display: flex; flex-direction: column; position: relative; padding: 4px; z-index: 10; overflow: hidden; }
+
+        .panel { 
+            display: none; height: 100%; flex-direction: column; 
+            animation-duration: 0.5s; animation-fill-mode: forwards; animation-timing-function: cubic-bezier(0.1, 0.9, 0.2, 1);
+        }
+        .panel.active { display: flex; }
+
+        @keyframes slideInFromTop { from { transform: translateY(-60px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        @keyframes slideInFromBottom { from { transform: translateY(60px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+        
+        .panel.slide-down { animation-name: slideInFromTop; }
+        .panel.slide-up { animation-name: slideInFromBottom; }
+
+        .display-screen {
+            height: 120px; display: flex; flex-direction: column; justify-content: flex-end;
+            align-items: flex-end; padding: 20px; font-size: 3rem; font-weight: 300;
+            text-align: right; word-break: break-all; outline: none;
+        }
+        body.dev-active .display-screen { border: 1px dashed var(--dev-border); cursor: text; }
+        .history-text { font-size: 1rem; color: #888; margin-bottom: 5px; height: 20px; }
+
+        /* --- KEYPAD & BUTTONS --- */
+        .keypad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 4px; flex: 1; overflow-y: auto; }
+        .keypad.sci { grid-template-columns: repeat(5, 1fr); }
+        
+        /* --- THE REVEAL EFFECT --- */
+        .reveal-btn {
+            position: relative; border: none; color: white; cursor: pointer; 
+            background: transparent; padding: 0;
+            background: radial-gradient(circle at var(--x) var(--y), var(--border-glow) 0%, transparent var(--glow-radius));
+            display: flex; justify-content: center; align-items: center; transition: color 0.2s;
+        }
+        
+        .reveal-btn::before {
+            content: ''; position: absolute; inset: 1px; z-index: 1; 
+            transition: background-color 0.1s; pointer-events: none; 
+            background: var(--btn-bg);
+            border-radius: inherit;
+        }
+        
+        .reveal-btn:hover {
+            background: radial-gradient(circle at var(--x) var(--y), var(--border-glow) 0%, transparent var(--glow-radius)), rgba(200, 200, 200, 0.3);
+        }
+
+        .reveal-btn:hover::before {
+            background: radial-gradient(circle at var(--x) var(--y), var(--surface-glow) 0%, transparent var(--glow-radius)), var(--btn-bg);
+        }
+        
+        .reveal-btn span, .reveal-btn i { position: relative; z-index: 2; pointer-events: none; }
+        .reveal-btn:active::before { background-color: #444; }
+        
+        body.no-effects .reveal-btn { background: var(--btn-bg); }
+        body.no-effects .reveal-btn::before { display: none; }
+        body.no-effects .reveal-btn:hover { background: #3a3a3a; }
+
+        .keypad-btn { font-size: 1.2rem; opacity: 0; border-radius: 0; min-height: 55px; }
+        .keypad-btn.accent span { color: var(--accent-color); font-weight: bold; }
+        .keypad-btn.equal-btn::before { background-color: var(--accent-color); }
+        
+        .keypad-btn.equal-btn:hover::before {
+            background: radial-gradient(circle at var(--x) var(--y), rgba(255,255,255,0.4) 0%, transparent var(--glow-radius)), var(--accent-color);
+        }
+
+        @keyframes popIn { 0% { opacity: 0; transform: scale(0.6) translateY(20px); } 100% { opacity: 1; transform: scale(1) translateY(0); } }
+        .keypad-btn.anim-pop, .mem-btn.anim-pop { animation: popIn 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        
+        /* --- DEVELOPER MODE --- */
+        body.dev-active .keypad-btn, body.dev-active .mem-btn { border: 1px dashed #555; }
+        body.dev-active .keypad-btn:hover, body.dev-active .mem-btn:hover { border-color: var(--dev-border); cursor: alias; }
+        body.dev-active .keypad-btn::after { content: '✎'; position: absolute; top: 2px; right: 2px; font-size: 10px; color: var(--dev-border); }
+        .add-btn-placeholder { display: none; border: 2px dashed #0f0; color: #0f0; font-size: 1.5rem; justify-content: center; align-items: center; cursor: pointer; opacity: 0.7; }
+        body.dev-active .add-btn-placeholder { display: flex; }
+        .add-btn-placeholder:hover { opacity: 1; background: rgba(0,255,0,0.1); }
+
+        /* Dev Editor Modal */
+        #dev-modal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; }
+        .modal-content { background: var(--panel-color); width: 400px; padding: 20px; border: 1px solid var(--accent-color); box-shadow: 0 0 20px rgba(0,0,0,0.8); }
+        .modal-header { font-size: 1.2rem; margin-bottom: 15px; color: var(--accent-color); }
+        .modal-row { margin-bottom: 15px; }
+        .modal-row label { display: block; color: #aaa; margin-bottom: 5px; font-size: 0.9rem; }
+        .modal-row input, .modal-row textarea { width: 100%; background: #222; border: 1px solid #444; color: white; padding: 8px; font-family: monospace; font-size: 1rem; }
+        .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+        .btn-modal { padding: 8px 16px; border: none; cursor: pointer; font-weight: bold; }
+        .btn-save { background: var(--accent-color); color: white; }
+        .btn-cancel { background: #444; color: white; }
+        .btn-delete { background: var(--error-color); color: white; margin-right: auto; }
+
+        /* --- UI PANELS --- */
+        .ui-container { padding: 40px; display: flex; flex-direction: column; gap: 20px; overflow-y: auto; height: 100%; }
+        .group-box { background: var(--panel-color); padding: 20px; border: 1px solid #444; position: relative; }
+        .group-label { display: block; margin-bottom: 10px; color: #aaa; font-size: 0.9rem; }
+        input { 
+            width: 100%; background: transparent; border: none; border-bottom: 2px solid var(--accent-color); 
+            color: white; font-size: 1.5rem; outline: none; padding: 5px 0; font-family: 'Segoe UI', sans-serif;
+            box-shadow: 0 5px 10px -4px var(--accent-color); transition: box-shadow 0.3s;
+        }
+        input:focus { box-shadow: 0 8px 15px -4px var(--accent-color); }
+        select { width: 100%; background: #333; color: white; padding: 10px; border: none; margin-top: 10px; }
+        
+        /* Memory */
+        .memory-bar { display: flex; justify-content: space-between; padding: 0 4px; margin-bottom: 5px; height: 30px; }
+        .mem-btn { flex: 1; border: none; color: white; font-size: 0.8rem; font-weight: 600; cursor: pointer; border-radius: 0; margin: 0 1px; opacity: 0; }
+        .memory-list { list-style: none; padding: 0; margin: 0; }
+        .memory-item {
+            position: relative;
+            margin-bottom: 10px;
+            border: 1px solid #444;
+            cursor: pointer;
+            background: radial-gradient(circle at var(--x) var(--y), var(--border-glow) 0%, transparent var(--glow-radius));
+            overflow: hidden;
+            padding: 0; /* remove padding from container */
+            display: block; /* remove flex from container */
+        }
+        .memory-item::before {
+            content: '';
+            position: absolute;
+            inset: 1px;
+            z-index: 1;
+            pointer-events: none;
+            background: var(--panel-color);
+            transition: background-color .1s;
+        }
+        .memory-item > div { /* The new wrapper */
+            position: relative;
+            z-index: 2;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px;
+        }
+        .memory-item:hover {
+            background: radial-gradient(circle at var(--x) var(--y), var(--border-glow) 0%, transparent var(--glow-radius)), rgba(200, 200, 200, 0.3);
+            border-color: var(--accent-color);
+        }
+        .memory-item:hover::before {
+             background: radial-gradient(circle at var(--x) var(--y), var(--surface-glow) 0%, transparent var(--glow-radius)), var(--panel-color);
+        }
+        .mem-val { font-size: 1.5rem; }
+
+        /* Tip */
+        .tip-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top:10px; }
+        .tip-result-row { display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #444; padding: 10px 0; }
+        .tip-result-val { font-size: 1.2rem; color: var(--accent-color); }
+
+        /* Settings */
+        .color-grid { display: flex; gap: 10px; margin-top: 10px; }
+        .color-option { width: 40px; height: 40px; border-radius: 0; cursor: pointer; border: 2px solid transparent; position: relative; overflow: hidden; }
+        .color-option.selected { border-color: white; box-shadow: 0 0 10px rgba(255,255,255,0.2); }
+        .custom-picker-btn { background: linear-gradient(135deg, #444, #222); display: flex; justify-content: center; align-items: center; }
+        .custom-picker-btn input[type="color"] { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+        .setting-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding: 15px; background: var(--panel-color); border: 1px solid #444; }
+        .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #555; transition: .4s; border-radius: 24px; }
+        .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+        input:checked + .slider { background-color: var(--accent-color); }
+        input:checked + .slider:before { transform: translateX(26px); }
+
+        /* Menu List Button */
+        .menu-list-btn {
+            width: 100%; text-align: left; padding: 15px; font-size: 1.2rem;
+            border: none; background: var(--panel-color); color: white; cursor: pointer;
+            position: relative;
+        }
+        .menu-list-btn:hover { background: #3a3a3a; }
+
+        /* About & Console */
+        .back-btn { background: transparent; border: none; color: #aaa; font-size: 1.2rem; cursor: pointer; margin-bottom: 20px; display: flex; align-items: center; gap: 10px; }
+        .back-btn:hover { color: white; }
+        .about-header { font-size: 2.5rem; font-weight: 300; margin-bottom: 10px; }
+        .about-info { color: #888; margin-bottom: 30px; line-height: 1.6; }
+        
+        #dev-console {
+            background: var(--console-bg); border: 1px solid #333; border-top: 2px solid var(--accent-color); height: 300px; margin-top: 20px;
+            font-family: 'Consolas', 'Courier New', monospace; color: var(--console-text); font-size: 0.9rem;
+            display: none; flex-direction: column;
+        }
+        #dev-console-log { flex-grow: 1; overflow-y: auto; padding: 10px; }
+        #dev-console-input {
+            background: #222; border: none; border-top: 1px solid #444; color: var(--console-text);
+            padding: 8px; font-family: 'Consolas', 'Courier New', monospace; outline: none;
+        }
+        .log-entry { margin-bottom: 4px; border-bottom: 1px solid #222; padding-bottom: 2px; }
+        .log-time { color: #666; margin-right: 10px; }
+
+        .result-val.error { color: var(--error-color); font-size: 1.2rem; }
+        .eq-helper { font-size: 0.85rem; color: #666; margin-top: 5px; font-style: italic; }
+
+        /* --- RECORD PANEL --- */
+        #record-container { font-family: 'Consolas', 'Courier New', monospace; color: #ccc; overflow-y: auto; flex-grow: 1; }
+        .record-entry { margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid #333; }
+        .record-time { color: #888; margin-right: 10px; }
+        .record-msg { color: #ddd; }
+
+        /* --- TOP MENU MODE --- */
+        .app-container.top-menu { flex-direction: column; }
+        .app-container.top-menu .sidebar { 
+            width: 100%; height: auto; padding: 5px;
+            flex-direction: row; border-right: none; border-bottom: 1px solid #333; 
+            overflow-x: auto; overflow-y: hidden; 
+        }
+        .app-container.top-menu .sidebar::-webkit-scrollbar { height: 0; }
+        .app-container.top-menu .nav-btn { 
+            flex: 1; height: 50px; margin: 0 1px; 
+            flex-direction: column; justify-content: center; padding: 0; 
+            border-radius: 0; min-width: 80px;
+        }
+        .app-container.top-menu .nav-btn i { margin-bottom: 4px; width: auto; font-size: 1.2rem; }
+        .app-container.top-menu .nav-label { font-size: 0.75rem; opacity: 1; margin: 0; display: block; }
+        .app-container.top-menu #menu-toggle { display: none; }
+        .app-container.top-menu .menu-label { display: none; }
+        .app-container.top-menu .nav-btn.active::after {
+            left: 50%; bottom: 0; top: auto; width: 40%; height: 3px; 
+            transform: translateX(-50%); border-radius: 0;
+        }
+        #nav-btn-record { display: none; }
+
+        /* --- NON-METRO STYLE --- */
+        body.non-metro .reveal-btn {
+            border-radius: 15px;
+            background: transparent;
+        }
+        body.non-metro .reveal-btn::before {
+            display: block;
+            inset: 0;
+            background: linear-gradient(270deg, #2d2d2d, #3a3a3a);
+            background-size: 400% 400%;
+            animation: flowingGradient 4s ease infinite;
+        }
+        body.non-metro .reveal-btn:hover { box-shadow: 0 0 15px var(--accent-color); background: transparent; }
+        body.non-metro .reveal-btn:hover::before { background: linear-gradient(270deg, var(--accent-color), #444); background-size: 400% 400%; }
+        
+        body.non-metro .sidebar { border-radius: 0 20px 20px 0; background: linear-gradient(180deg, var(--bg-color), #222); }
+        body.non-metro .group-box, body.non-metro input, body.non-metro .display-screen { border-radius: 15px; }
+        @keyframes flowingGradient {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+        }
+
+        /* --- SUPER MODE --- */
+        #super-modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 3000; justify-content: center; align-items: center; backdrop-filter: blur(5px); }
+        
+        body:not(.non-metro) #super-modal .modal-content {
+            background: linear-gradient(135deg, rgba(0,0,255,0.9), rgba(255,255,255,0.9), rgba(0,0,255,0.9));
+            background-size: 200% 200%;
+            border: 4px solid blue;
+            color: black;
+            animation: superFlash 0.5s linear infinite;
+            box-shadow: 0 0 30px blue;
+        }
+        body:not(.non-metro) #super-modal .reveal-btn {
+            color: black;
+            border-color: #000 !important;
+            text-shadow: none;
+        }
+        body:not(.non-metro) #super-modal .reveal-btn:hover { background: rgba(255,255,255,0.3); }
+        @keyframes superFlash { 0% { background-position: 0% 50%; border-color: blue; } 50% { background-position: 100% 50%; border-color: white; } 100% { background-position: 0% 50%; border-color: blue; } }
+
+        /* --- DEVELOPER MODE --- */
+        .radix-container { display: flex; flex-direction: column; gap: 2px; margin-bottom: 10px; background: rgba(0,0,0,0.2); padding: 5px; border: 1px solid #333; }
+        .radix-row { display: flex; align-items: center; padding: 4px 10px; cursor: pointer; border-left: 4px solid transparent; transition: background 0.2s; }
+        .radix-row:hover { background: rgba(255,255,255,0.05); }
+        .radix-row.active { border-left-color: var(--accent-color); background: rgba(255,255,255,0.1); }
+        .radix-label { width: 40px; font-weight: 600; color: var(--accent-color); font-size: 0.9rem; }
+        .radix-val { font-family: 'Consolas', monospace; margin-left: 10px; word-break: break-all; font-size: 1rem; color: #ddd; }
+
+        .bit-display { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; margin-bottom: 10px; padding: 5px; background: rgba(0,0,0,0.2); border: 1px solid #333; }
+        .bit-btn { 
+            background: transparent; border: 1px solid #333; color: #555; cursor: pointer; 
+            text-align: center; padding: 4px 0; font-family: 'Consolas', monospace; font-size: 0.75rem;
+            transition: all 0.2s;
+        }
+        .bit-btn.on { color: var(--accent-color); border-color: var(--accent-color); background: rgba(255,255,255,0.05); font-weight: bold; }
+        .bit-legend { grid-column: span 16; display: flex; justify-content: space-between; padding: 0 2px; color: #666; font-size: 0.7rem; margin-top: 2px; }
+
+        .dev-controls { display: flex; gap: 5px; margin-bottom: 5px; }
+        .dev-toggle-btn { 
+            flex: 1; font-size: 0.85rem; padding: 8px; border: none; color: white; cursor: pointer; 
+            border-bottom: 2px solid transparent; transition: border-color 0.2s;
+        }
+        .dev-toggle-btn.active { border-bottom-color: var(--accent-color); font-weight: bold; }
+        .dev-hex-btn[disabled] { opacity: 0.2; pointer-events: none; }
+
+        /* Sidebar Labels */
+        .menu-label {
+            display: flex; align-items: center; padding: 15px 0 5px 20px; width: 100%;
+            box-sizing: border-box; transition: all 0.3s ease; overflow: hidden; flex-shrink: 0;
+        }
+        .sidebar:not(.expanded) .menu-label { height: 0; padding: 0; opacity: 0; margin: 0; }
+        .menu-label-text {
+            font-size: 0.8rem; color: #888; margin-right: 10px;
+            white-space: nowrap; text-transform: uppercase; font-weight: 600;
+        }
+        .menu-line { flex-grow: 1; height: 1px; background: #444; margin-right: 15px; }
+        .bottom-label { margin-top: auto; }
+
+        /* Bit Toggling */
+        .bit-display { display: none; } /* Hidden by default */
+        .bit-keypad-toggle {
+            width: 100%; padding: 8px; color: white; border: none;
+            cursor: pointer; margin-bottom: 10px; font-size: 0.9rem;
+        }
+
+        /* Tab System */
+        #tab-system {
+            position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+            background: var(--bg-color); z-index: 10000; display: flex; flex-direction: column;
+        }
+        .tab-header { height: 40px; background: #111; display: flex; align-items: center; border-bottom: 1px solid #333; }
+        .tab-btn {
+            padding: 0 20px; height: 100%; background: #222; color: #888; border: none;
+            border-right: 1px solid #333; cursor: pointer; display: flex; align-items: center; gap: 10px; font-size: 0.9rem;
+        }
+        .tab-btn.active { background: var(--bg-color); color: var(--accent-color); border-top: 2px solid var(--accent-color); }
+        .tab-btn:hover { background: #333; }
+        .tab-close { font-size: 0.8rem; margin-left: 5px; opacity: 0.5; }
+        .tab-close:hover { opacity: 1; color: var(--error-color); }
+        .tab-add-btn { width: 40px; height: 100%; background: #111; color: #aaa; border: none; cursor: pointer; font-size: 1.2rem; }
+        .tab-add-btn:hover { background: #222; color: white; }
+        .tab-close-sys { padding: 0 15px; background: var(--error-color); color: white; border: none; height: 100%; cursor: pointer; margin-left: auto; }
+        #tab-content-area { flex: 1; position: relative; }
+        .tab-iframe { width: 100%; height: 100%; border: none; position: absolute; top: 0; left: 0; background: var(--bg-color); }
+    </style>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="pro calculator.css">
+</head>
+<body>
+
+<div class="app-container" id="app">
+    <!-- Sidebar -->
+    <nav class="sidebar" id="sidebar">
+        <button class="nav-btn reveal-btn" id="menu-toggle" onclick="toggleSidebar()" title="Toggle Menu"><i class="fas fa-bars"></i></button>
+        
+        <div class="menu-label">
+            <span class="menu-label-text">calculator</span>
+            <div class="menu-line"></div>
+        </div>
+        <button class="nav-btn reveal-btn active" onclick="switchMode('basic')" title="Standard"><i class="fas fa-calculator"></i><span class="nav-label">Standard</span></button>
+        <button class="nav-btn reveal-btn" onclick="switchMode('scientific')" title="Scientific"><i class="fas fa-flask"></i><span class="nav-label">Scientific</span></button>
+        <button class="nav-btn reveal-btn" onclick="switchMode('equation')" title="Equation"><i class="fas fa-square-root-alt"></i><span class="nav-label">Graphing / Eq</span></button>
+        
+        <div class="menu-label">
+            <span class="menu-label-text">convert and memory</span>
+            <div class="menu-line"></div>
+        </div>
+        <button class="nav-btn reveal-btn" onclick="switchMode('converter')" title="Converter"><i class="fas fa-exchange-alt"></i><span class="nav-label">Converter</span></button>
+        <button class="nav-btn reveal-btn" onclick="switchMode('memory')" title="Variables"><i class="fas fa-microchip"></i><span class="nav-label">Variables</span></button>
+        <button class="nav-btn reveal-btn" id="nav-btn-record" onclick="switchMode('record')" title="Action Record"><i class="fas fa-history"></i><span class="nav-label">Record</span></button>
+        
+        <div class="menu-label">
+            <span class="menu-label-text">advanced</span>
+            <div class="menu-line"></div>
+        </div>
+        <button class="nav-btn reveal-btn" onclick="switchMode('advanced')" title="Advanced"><i class="fas fa-layer-group"></i><span class="nav-label">Advanced</span></button>
+        <button class="nav-btn reveal-btn" onclick="switchMode('developer')" title="Developer"><i class="fas fa-code"></i><span class="nav-label">Developer</span></button>
+        <button class="nav-btn reveal-btn" onclick="openSuperMode()" title="Super Mode"><i class="fas fa-bolt"></i><span class="nav-label">Super Mode</span></button>
+        
+        <div class="menu-label bottom-label">
+            <span class="menu-label-text">settings and account</span>
+            <div class="menu-line"></div>
+        </div>
+        <button class="nav-btn reveal-btn" onclick="switchMode('account')" title="Account"><i class="fas fa-user"></i><span class="nav-label">Account</span></button>
+        <button class="nav-btn reveal-btn" onclick="switchMode('settings')" title="Settings"><i class="fas fa-cog"></i><span class="nav-label">Settings</span></button>
+        <button class="nav-btn reveal-btn" onclick="switchMode('feedback')" title="Feedback"><i class="fas fa-comment-alt"></i><span class="nav-label">Feedback</span></button>
+    </nav>
+
+    <!-- MAIN CONTENT -->
+    <div class="content">
+
+        <!-- 1. BASIC MODE -->
+        <div class="panel active" id="panel-basic">
+            <div class="display-screen" id="display-basic">0</div>
+            <div class="history-text" id="history-basic"></div>
+            <div class="memory-bar">
+                <button class="mem-btn reveal-btn" onclick="memClear()"><span>MC</span></button><button class="mem-btn reveal-btn" onclick="memRecall()"><span>MR</span></button><button class="mem-btn reveal-btn" onclick="memAdd()"><span>M+</span></button><button class="mem-btn reveal-btn" onclick="memSub()"><span>M-</span></button><button class="mem-btn reveal-btn" onclick="memStore()"><span>MS</span></button>
+            </div>
+            <div class="keypad" id="keypad-basic">
+                <button class="reveal-btn keypad-btn" onclick="appendOp('(')"><span>(</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendOp(')')"><span>)</span></button>
+                <button class="reveal-btn keypad-btn accent" onclick="clearDisplay()"><span>C</span></button>
+                <button class="reveal-btn keypad-btn" onclick="deleteLast()"><span>DEL</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendOp('%')"><span>%</span></button>
+                <button class="reveal-btn keypad-btn" onclick="sciMath('sq')"><span>x²</span></button>
+                <button class="reveal-btn keypad-btn" onclick="sciMath('sqrt')"><span>√</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendOp('/')"><span>÷</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('7')"><span>7</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('8')"><span>8</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('9')"><span>9</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendOp('*')"><span>×</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('4')"><span>4</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('5')"><span>5</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('6')"><span>6</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendOp('-')"><span>-</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('1')"><span>1</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('2')"><span>2</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('3')"><span>3</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendOp('+')"><span>+</span></button>
+                <button class="reveal-btn keypad-btn" onclick="toggleSign()"><span>+/-</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('0')"><span>0</span></button>
+                <button class="reveal-btn keypad-btn" onclick="appendNum('.')"><span>.</span></button>
+                <button class="reveal-btn keypad-btn equal-btn" id="btn-equal-basic"><span>=</span></button>
+                <div class="add-btn-placeholder" onclick="addNewButton('keypad-basic')">+</div>
+            </div>
+        </div>
+
+        <!-- 2. SCIENTIFIC MODE -->
+        <div class="panel" id="panel-scientific">
+            <div class="display-screen" id="display-sci">0</div>
+            <div class="history-text" id="history-sci"></div>
+            <div class="memory-bar">
+                <button class="mem-btn reveal-btn" onclick="memClear()"><span>MC</span></button><button class="mem-btn reveal-btn" onclick="memRecall()"><span>MR</span></button><button class="mem-btn reveal-btn" onclick="memAdd()"><span>M+</span></button><button class="mem-btn reveal-btn" onclick="memSub()"><span>M-</span></button><button class="mem-btn reveal-btn" onclick="memStore()"><span>MS</span></button>
+            </div>
+            <div class="keypad sci" id="keypad-sci">
+                <button class="reveal-btn keypad-btn" onclick="sciMath('sin')"><span>sin</span></button><button class="reveal-btn keypad-btn" onclick="sciMath('cos')"><span>cos</span></button><button class="reveal-btn keypad-btn" onclick="sciMath('tan')"><span>tan</span></button><button class="reveal-btn keypad-btn accent" onclick="clearDisplay()"><span>C</span></button><button class="reveal-btn keypad-btn" onclick="deleteLast()"><span>⌫</span></button>
+                <button class="reveal-btn keypad-btn" onclick="sciMath('log')"><span>log</span></button><button class="reveal-btn keypad-btn" onclick="sciMath('ln')"><span>ln</span></button><button class="reveal-btn keypad-btn" onclick="appendOp('(')"><span>(</span></button><button class="reveal-btn keypad-btn" onclick="appendOp(')')"><span>)</span></button><button class="reveal-btn keypad-btn" onclick="appendOp('/')"><span>÷</span></button>
+                <button class="reveal-btn keypad-btn" onclick="sciMath('sqrt')"><span>√</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('7')"><span>7</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('8')"><span>8</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('9')"><span>9</span></button><button class="reveal-btn keypad-btn" onclick="appendOp('*')"><span>×</span></button>
+                <button class="reveal-btn keypad-btn" onclick="sciMath('sq')"><span>x²</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('4')"><span>4</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('5')"><span>5</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('6')"><span>6</span></button><button class="reveal-btn keypad-btn" onclick="appendOp('-')"><span>-</span></button>
+                <button class="reveal-btn keypad-btn" onclick="sciMath('pi')"><span>π</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('1')"><span>1</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('2')"><span>2</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('3')"><span>3</span></button><button class="reveal-btn keypad-btn" onclick="appendOp('+')"><span>+</span></button>
+                <button class="reveal-btn keypad-btn" onclick="sciMath('e')"><span>e</span></button><button class="reveal-btn keypad-btn" onclick="toggleSign()"><span>+/-</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('0')"><span>0</span></button><button class="reveal-btn keypad-btn" onclick="appendNum('.')"><span>.</span></button><button class="reveal-btn keypad-btn equal-btn" id="btn-equal-sci"><span>=</span></button>
+                <div class="add-btn-placeholder" onclick="addNewButton('keypad-sci')">+</div>
+            </div>
+        </div>
+
+        <!-- 3. EQUATION MODE -->
+        <div class="panel" id="panel-equation">
+            <div class="ui-container">
+                <h2 style="font-weight:300; margin:0;">Equation Solver</h2>
+                <div class="group-box">
+                    <label class="group-label">Select Type</label>
+                    <select id="eq-type" onchange="toggleEquationType()"><option value="quadratic">Quadratic (ax² + bx + c = 0)</option><option value="system">System of Equations</option></select>
+                </div>
+                <div id="ui-quadratic" class="group-box">
+                    <label class="group-label">Enter Equation (Supports /, ÷, brackets)</label>
+                    <div class="eq-input-row"><input type="text" id="q-input" placeholder="e.g. 2(x+1) = 10"></div>
+                    <button class="reveal-btn keypad-btn equal-btn" style="width:100%; margin-top:10px; opacity:1;" onclick="solveQuadraticManual()"><span>Solve</span></button>
+                    <div class="result-box"><label class="group-label">Result</label><div id="res-quadratic" class="result-val"></div></div>
+                </div>
+                <div id="ui-system" class="group-box" style="display:none;">
+                    <label class="group-label">Enter Equations (Supports /, ÷, brackets)</label>
+                    <div class="eq-input-row"><input type="text" id="s-input1" placeholder="e.g. x/2 + y = 5"></div>
+                    <div class="eq-input-row"><input type="text" id="s-input2" placeholder="e.g. x - y = 1"></div>
+                    <div class="eq-input-row"><input type="text" id="s-input3" placeholder="e.g. z = x + y (Optional)"></div>
+                    <button class="reveal-btn keypad-btn equal-btn" style="width:100%; margin-top:10px; opacity:1;" onclick="solveSystemManual()"><span>Solve System</span></button>
+                    <div class="result-box"><label class="group-label">Result</label><div id="res-system" class="result-val"></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4. ADVANCED MODE (NEW) -->
+        <div class="panel" id="panel-advanced">
+            <div class="ui-container">
+                <h2 style="font-weight:300; margin:0;">Advanced Math</h2>
+                <div class="group-box">
+                    <label class="group-label">LCM & HCF (Max 10 numbers)</label>
+                    <input type="text" id="adv-input" placeholder="e.g. 12, 15, 20">
+                    <div class="eq-helper">Separate numbers with commas or spaces</div>
+                    <div style="display:flex; gap:10px; margin-top:15px;">
+                        <button class="reveal-btn keypad-btn equal-btn" style="flex:1; opacity:1;" onclick="calcAdvanced('lcm')"><span>LCM</span></button>
+                        <button class="reveal-btn keypad-btn equal-btn" style="flex:1; opacity:1;" onclick="calcAdvanced('hcf')"><span>HCF</span></button>
+                    </div>
+                    <div class="result-box">
+                        <label class="group-label">Result</label>
+                        <div id="res-advanced" class="result-val"></div>
+                    </div>
+                </div>
+                <div class="group-box">
+                    <label class="group-label">Polynomial Simplification</label>
+                    <input type="text" id="simplify-input" placeholder="e.g. 2x^2 + y - x^2 or 2xp2 + y - xp2">
+                    <div class="eq-helper">Use standard operators +, -, *. Use ^ or p for powers (e.g. xp2 = x^2). No parentheses.</div>
+                    <button class="reveal-btn keypad-btn equal-btn" style="width:100%; margin-top:15px; opacity:1;" onclick="simplifyExpression()"><span>Simplify</span></button>
+                    <div class="result-box">
+                        <label class="group-label">Result</label>
+                        <div id="res-simplify" class="result-val"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DEVELOPER MODE -->
+        <div class="panel" id="panel-developer">
+            <div class="ui-container" style="padding-bottom: 0; overflow: hidden; display: flex; flex-direction: column;">
+                <div class="display-screen" id="display-dev" style="height: 80px; font-size: 2.5rem; margin-bottom: 10px;">0</div>
+                
+                <div class="radix-container">
+                    <div class="radix-row" id="row-hex" onclick="setDevBase(16)"><span class="radix-label">HEX</span><span class="radix-val" id="val-hex">0</span></div>
+                    <div class="radix-row active" id="row-dec" onclick="setDevBase(10)"><span class="radix-label">DEC</span><span class="radix-val" id="val-dec">0</span></div>
+                    <div class="radix-row" id="row-oct" onclick="setDevBase(8)"><span class="radix-label">OCT</span><span class="radix-val" id="val-oct">0</span></div>
+                    <div class="radix-row" id="row-bin" onclick="setDevBase(2)"><span class="radix-label">BIN</span><span class="radix-val" id="val-bin">0</span></div>
+                </div>
+
+                <div class="dev-controls">
+                    <button class="dev-toggle-btn reveal-btn" id="btn-word-size" onclick="cycleWordSize()"><span>QWORD</span></button>
+                    <button class="dev-toggle-btn reveal-btn" id="btn-signed" onclick="toggleDevSigned()"><span>SIGNED</span></button>
+                </div>
+
+                <button class="bit-keypad-toggle reveal-btn" onclick="toggleBitKeypad()"><span>Show/Hide Bit Toggling Keypad</span></button>
+                <div class="bit-display" id="bit-grid"></div>
+
+                <div class="keypad" id="keypad-dev" style="grid-template-columns: repeat(6, 1fr);">
+                    <button class="reveal-btn keypad-btn" onclick="devBitwise('LSH')"><span>Lsh</span></button><button class="reveal-btn keypad-btn" onclick="devBitwise('RSH')"><span>Rsh</span></button><button class="reveal-btn keypad-btn" onclick="devBitwise('OR')"><span>Or</span></button><button class="reveal-btn keypad-btn" onclick="devBitwise('XOR')"><span>Xor</span></button><button class="reveal-btn keypad-btn" onclick="devBitwise('NOT')"><span>Not</span></button><button class="reveal-btn keypad-btn" onclick="devBitwise('AND')"><span>And</span></button>
+                    
+                    <button class="reveal-btn keypad-btn" onclick="devBitwise('ROL')"><span>RoL</span></button><button class="reveal-btn keypad-btn" onclick="devBitwise('ROR')"><span>RoR</span></button><button class="reveal-btn keypad-btn" onclick="devMath('%')"><span>Mod</span></button><button class="reveal-btn keypad-btn accent" onclick="clearDev()"><span>CE</span></button><button class="reveal-btn keypad-btn accent" onclick="clearDev()"><span>C</span></button><button class="reveal-btn keypad-btn" onclick="devBackspace()"><span>⌫</span></button>
+
+                    <button class="reveal-btn keypad-btn dev-hex-btn" onclick="appendDev('A')"><span>A</span></button><button class="reveal-btn keypad-btn dev-hex-btn" onclick="appendDev('B')"><span>B</span></button><button class="reveal-btn keypad-btn" onclick="appendDev('7')"><span>7</span></button><button class="reveal-btn keypad-btn" onclick="appendDev('8')"><span>8</span></button><button class="reveal-btn keypad-btn" onclick="appendDev('9')"><span>9</span></button><button class="reveal-btn keypad-btn" onclick="devMath('*')"><span>×</span></button>
+
+                    <button class="reveal-btn keypad-btn dev-hex-btn" onclick="appendDev('C')"><span>C</span></button><button class="reveal-btn keypad-btn dev-hex-btn" onclick="appendDev('D')"><span>D</span></button><button class="reveal-btn keypad-btn" onclick="appendDev('4')"><span>4</span></button><button class="reveal-btn keypad-btn" onclick="appendDev('5')"><span>5</span></button><button class="reveal-btn keypad-btn" onclick="appendDev('6')"><span>6</span></button><button class="reveal-btn keypad-btn" onclick="devMath('-')"><span>-</span></button>
+
+                    <button class="reveal-btn keypad-btn dev-hex-btn" onclick="appendDev('E')"><span>E</span></button><button class="reveal-btn keypad-btn dev-hex-btn" onclick="appendDev('F')"><span>F</span></button><button class="reveal-btn keypad-btn" onclick="appendDev('1')"><span>1</span></button><button class="reveal-btn keypad-btn" onclick="appendDev('2')"><span>2</span></button><button class="reveal-btn keypad-btn" onclick="appendDev('3')"><span>3</span></button><button class="reveal-btn keypad-btn" onclick="devMath('+')"><span>+</span></button>
+
+                    <button class="reveal-btn keypad-btn" onclick="appendDev('(')"><span>(</span></button><button class="reveal-btn keypad-btn" onclick="appendDev(')')"><span>)</span></button><button class="reveal-btn keypad-btn" onclick="devMath('NEG')"><span>±</span></button><button class="reveal-btn keypad-btn" onclick="appendDev('0')"><span>0</span></button><button class="reveal-btn keypad-btn" onclick="devAscii()"><span>ASC</span></button><button class="reveal-btn keypad-btn equal-btn" onclick="calcDev()"><span>=</span></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 5. CONVERTER MODE -->
+        <div class="panel" id="panel-converter">
+            <div class="ui-container">
+                <div class="" style="margin-bottom: 10px;">
+                    <h2 style="font-weight:300; margin:0 0 10px 0;">Converter</h2>
+                    <select id="conv-category" onchange="updateConverterUI()" style="font-size: 1.2rem; padding: 10px;"><option value="length">📏 Length</option><option value="mass">⚖️ Mass (Weight)</option><option value="volume">🧪 Volume</option><option value="area">🟩 Area</option><option value="speed">🚀 Speed</option><option value="time">⏱️ Time</option><option value="temp">🌡️ Temperature</option><option value="money">💲 Currency</option><option value="tip">🍽️ Tip Calculator</option></select>
+                </div>
+                <div id="unit-ui">
+                    <div class="group-box"><label class="group-label">From</label><input type="number" id="conv-input" value="1" oninput="runConversion()"><select id="conv-from" onchange="runConversion()"></select></div>
+                    <div class="group-box" style="border-color: var(--accent-color); margin-top:20px;"><label class="group-label">To</label><input type="text" id="conv-output" readonly style="border:none; font-size:2rem;"><select id="conv-to" onchange="runConversion()"></select></div>
+                </div>
+                <div id="tip-ui" style="display:none;">
+                    <div class="group-box"><label class="group-label">Bill Amount</label><input type="number" id="tip-bill" placeholder="0.00" oninput="calcTip()"><div class="tip-grid"><div><label class="group-label">Tip (%)</label><input type="number" id="tip-percent" value="15" oninput="calcTip()"></div><div><label class="group-label">People</label><input type="number" id="tip-people" value="1" oninput="calcTip()"></div></div></div>
+                    <div class="group-box" style="margin-top:20px; border-color: var(--accent-color);"><div class="tip-result-row"><span>Tip Amount</span><span class="tip-result-val" id="res-tip-amount">$0.00</span></div><div class="tip-result-row"><span>Total Bill</span><span class="tip-result-val" id="res-tip-total">$0.00</span></div><div class="tip-result-row" style="border:none;"><span>Per Person</span><span class="tip-result-val" id="res-tip-person">$0.00</span></div></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 6. VARIABLE MEMORY MODE -->
+        <div class="panel" id="panel-memory">
+            <div class="ui-container">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <h2 style="font-weight:300; margin:0;">Variables</h2>
+                    <button class="reveal-btn keypad-btn" style="opacity:1; width:120px; font-size:0.9rem; border-radius:0;" onclick="clearAllVariables()"><span>Clear All</span></button>
+                </div>
+                <div id="variable-container" style="margin-top:10px;"></div>
+            </div>
+        </div>
+
+        <!-- 7. RECORD MODE -->
+        <div class="panel" id="panel-record">
+            <div class="ui-container" style="padding:0; gap:0;">
+                <h2 style="font-weight:300; margin:0; padding: 20px 40px 10px 40px;">Action Record</h2>
+                <div id="record-container">
+                    <div class="record-entry"><span class="record-time">[SYSTEM]</span><span class="record-msg"> Awaiting user login...</span></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 9. ACCOUNT MODE -->
+        <div class="panel" id="panel-account">
+            <div class="ui-container">
+                <h2 style="font-weight:300;">Account</h2>
+                <div class="group-box" id="login-box">
+                    <label class="group-label">Sign In</label>
+                    <div style="margin-bottom:20px;"><input type="text" id="login-username" placeholder="Username" style="margin-bottom:10px;"><input type="password" id="login-password" placeholder="Password"></div>
+                    <button class="reveal-btn keypad-btn equal-btn" style="width:100%; opacity:1; border-radius:0;" onclick="loginUser()"><span>Login</span></button>
+                </div>
+                <div class="group-box" id="profile-box" style="display:none; text-align:center; padding:30px;">
+                    <div id="profile-avatar-container" style="margin-bottom:15px; display:flex; justify-content:center;">
+                        <i id="default-avatar" class="fas fa-user-circle" style="font-size:4rem; color:var(--accent-color);"></i>
+                        <img id="custom-avatar" src="" style="display:none; width:80px; height:80px; border-radius:50%; object-fit:cover; border: 2px solid var(--accent-color);">
+                    </div>
+                    <h2 id="welcome-message" style="font-weight:300; margin:0 0 20px 0;">Hello , Cheng Man Chun !</h2>
+                    <input type="file" id="profile-upload" accept="image/*" style="display:none" onchange="updateProfileImage(this)">
+                    <button class="reveal-btn keypad-btn" style="width:100%; margin-bottom:10px; opacity:1; border-radius:0; font-size:1rem; border:1px solid #444;" onclick="openProfileSettings()"><span>Profile Settings</span></button>
+                    <button class="reveal-btn keypad-btn" style="width:100%; margin-bottom:10px; opacity:1; border-radius:0; font-size:1rem; border:1px solid #444;" onclick="openPaidFeature()"><span>Paid Feature -- Colorful Effect</span></button>
+                    <button class="reveal-btn keypad-btn" style="width:120px; margin:0 auto; opacity:1; border-radius:0; font-size:1rem; border:1px solid #444;" onclick="logoutUser()"><span>Sign Out</span></button>
+                </div>
+                
+                <!-- PAID FEATURE PAGE -->
+                <div id="paid-feature-page" style="display:none;">
+                    <button class="reveal-btn keypad-btn" style="width:100px; opacity:1; border-radius:0; margin-bottom:20px;" onclick="closePaidFeature()"><span><i class="fas fa-arrow-left"></i> Back</span></button>
+                    
+                    <div id="payment-section" class="group-box">
+                        <h3 style="margin-top:0;">Unlock Colorful Glow</h3>
+                        <p style="color:#aaa;">Customize your cursor glow effect color. One-time payment of $1.99.</p>
+                        <div style="display:flex; gap:10px; flex-direction:column;">
+                            <button class="reveal-btn keypad-btn" style="opacity:1; border-radius:0; text-align:left; padding:15px;" onclick="simulatePayment('PayPal', this)"><span><i class="fab fa-paypal"></i> Pay with PayPal</span></button>
+                            <button class="reveal-btn keypad-btn" style="opacity:1; border-radius:0; text-align:left; padding:15px;" onclick="simulatePayment('Credit Card', this)"><span><i class="fas fa-credit-card"></i> Pay with Credit Card</span></button>
+                        </div>
+                    </div>
+
+                    <div id="glow-customizer" class="group-box" style="display:none;">
+                        <h3 style="margin-top:0;">Custom Glow Color</h3>
+                        <p style="color:#aaa;">Select a color for the cursor glow effect.</p>
+                        <div class="color-option custom-picker-btn" style="width:100%; height:60px; border-radius:0;"><span style="position:relative; z-index:2;">Pick Color</span><input type="color" oninput="setGlowColor(this.value)"></div>
+                        <button class="reveal-btn keypad-btn" style="opacity:1; border-radius:0; margin-top:20px; width:100%;" onclick="resetGlowColor()"><span>Reset to Default</span></button>
+                    </div>
+                    
+                    <div class="group-box" style="margin-top:20px;">
+                        <label class="group-label">Data Management</label>
+                        <p style="color:#aaa; margin-bottom:15px;">Export your calculation history and action logs to a local file.</p>
+                        <button class="reveal-btn keypad-btn" style="width:100%; opacity:1; border-radius:0; font-size:1rem; border:1px solid #444;" onclick="exportRecord()"><span><i class="fas fa-file-export"></i> Export Record (.txt)</span></button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 10. SETTINGS MODE -->
+        <div class="panel" id="panel-settings">
+             <div class="ui-container">
+                <h2 style="font-weight:300;">Personalization</h2>
+                
+                <!-- Background Color -->
+                <div class="group-box">
+                    <label class="group-label">Background Color</label>
+                    <div class="color-grid">
+                        <div class="color-option" style="background:#202020" onclick="setBg('#202020')"></div>
+                        <div class="color-option" style="background:#000000" onclick="setBg('#000000')"></div>
+                        <div class="color-option" style="background:#1a1a2e" onclick="setBg('#1a1a2e')"></div>
+                        <div class="color-option" style="background:#2e1a2e" onclick="setBg('#2e1a2e')"></div>
+                        <div class="color-option custom-picker-btn"><i class="fas fa-fill-drip"></i><input type="color" oninput="setBg(this.value)"></div>
+                    </div>
+                </div>
+
+                <!-- Accent Color -->
+                <div class="group-box" style="margin-top:20px;">
+                    <label class="group-label">Accent Color</label>
+                    <div class="color-grid">
+                        <div class="color-option selected" style="background:#0078d7" onclick="setAccent('#0078d7', this)"></div>
+                        <div class="color-option" style="background:#ca5010" onclick="setAccent('#ca5010', this)"></div>
+                        <div class="color-option" style="background:#10893e" onclick="setAccent('#10893e', this)"></div>
+                        <div class="color-option" style="background:#881798" onclick="setAccent('#881798', this)"></div>
+                        <div class="color-option" style="background:#e81123" onclick="setAccent('#e81123', this)"></div>
+                        <div class="color-option custom-picker-btn" id="custom-wrapper"><i class="fas fa-palette"></i><input type="color" oninput="setCustomAccent(this.value)"></div>
+                    </div>
+                </div>
+
+                <!-- Button Color -->
+                <div class="group-box" style="margin-top:20px;">
+                    <label class="group-label">Button Color</label>
+                    <div class="color-grid">
+                        <div class="color-option" style="background:#2d2d2d" onclick="setBtnColor('#2d2d2d')"></div>
+                        <div class="color-option" style="background:#151515" onclick="setBtnColor('#151515')"></div>
+                        <div class="color-option" style="background:#202835" onclick="setBtnColor('#202835')"></div>
+                        <div class="color-option custom-picker-btn"><i class="fas fa-fill-drip"></i><input type="color" oninput="setBtnColor(this.value)"></div>
+                    </div>
+                </div>
+
+                <div class="setting-row" style="margin-top:20px;">
+                    <span>Top Menu Bar</span>
+                    <label class="switch"><input type="checkbox" id="top-bar-toggle" onchange="toggleTopBar()"><span class="slider"></span></label>
+                </div>
+
+                <div class="setting-row" style="margin-top:20px;">
+                    <span>Non-Metro Style (Rounded & Flowing)</span>
+                    <label class="switch"><input type="checkbox" id="non-metro-toggle" onchange="toggleNonMetro()"><span class="slider"></span></label>
+                </div>
+
+                <div class="setting-row" style="margin-top:20px;">
+                    <span>Cursor Glow Effect</span>
+                    <label class="switch"><input type="checkbox" id="effect-toggle" checked onchange="toggleEffects()"><span class="slider"></span></label>
+                </div>
+                
+                <div class="setting-row">
+                    <span>Glow Radius (1-10)</span>
+                    <input type="range" id="glow-radius-input" min="1" max="10" value="5" oninput="updateGlowRadius()">
+                </div>
+                
+                <div class="setting-row">
+                    <span>Decimal Places (Round Off)</span>
+                    <input type="number" id="rounding-input" value="8" min="0" max="10" style="width:60px; text-align:center;" onchange="updateRounding()">
+                </div>
+
+                <div class="setting-row" id="setting-tabview-row" style="display:none;">
+                    <span>Multi-Tab Mode</span>
+                    <label class="switch"><input type="checkbox" id="tabview-toggle" onchange="toggleTabMode()"><span class="slider"></span></label>
+                </div>
+                
+                <!-- ABOUT BUTTON (FIXED CLASS: menu-list-btn) -->
+                <div class="group-box" style="margin-top:20px;">
+                    <button class="menu-list-btn reveal-btn" onclick="openAboutPage()"><span><i class="fas fa-info-circle"></i> About</span></button>
+                </div>
+
+                <div class="group-box" style="margin-top:20px;">
+                    <button class="menu-list-btn reveal-btn" onclick="window.location.href='index.html'"><span><i class="fas fa-arrow-left"></i> Back</span></button>
+                </div>
+             </div>
+        </div>
+
+        <!-- 12. FEEDBACK MODE -->
+        <div class="panel" id="panel-feedback">
+            <div class="ui-container">
+                <h2 style="font-weight:300;">Feedback</h2>
+                <div class="group-box">
+                    <label class="group-label">Your Feedback</label>
+                    <textarea id="feedback-input" style="width:100%; height:200px; background:rgba(0,0,0,0.2); border:1px solid #444; color:white; padding:15px; font-family:inherit; resize:none; font-size:1rem; outline:none;" placeholder="Type your feedback here..."></textarea>
+                    <button class="reveal-btn keypad-btn" style="width:100%; margin-top:20px; opacity:1; border-radius:0;" onclick="sendFeedback()"><span>Send Feedback</span></button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 11. ABOUT PAGE -->
+        <div class="panel" id="panel-about">
+            <div class="ui-container">
+                <button class="reveal-btn keypad-btn" style="opacity:1; width:120px; font-size:1rem; margin-bottom:20px; border-radius:0;" onclick="closeAboutPage()"><span><i class="fas fa-arrow-left"></i> Back</span></button>
+                <h1 class="about-header">Metro Calculator</h1>
+                <div class="about-info"><p>Version 4.8 (Ultimate Custom)</p><p>© 2023 Metro Calc Project</p></div>
+                <div class="setting-row">
+                    <span>Developer Mode</span>
+                    <label class="switch"><input type="checkbox" id="dev-toggle" onchange="toggleDevMode()"><span class="slider"></span></label>
+                </div>
+                <!-- Developer Console -->
+                <div id="dev-console" style="display: none; flex-direction: column;">
+                    <div id="dev-console-log" style="flex-grow: 1; overflow-y: auto; padding: 10px;"><div class="log-entry"><span class="log-time">[SYSTEM]</span> Console Ready...</div></div>
+                    <input type="text" id="dev-console-input" placeholder="> Enter command..." onkeydown="handleConsoleInput(event)">
+                </div>
+            </div>
+        </div>
+
+    </div>
+</div>
+
+<!-- DEV EDITOR MODAL -->
+<div id="dev-modal">
+    <div class="modal-content">
+        <div class="modal-header">Component Editor</div>
+        <div class="modal-row"><label>Label</label><input type="text" id="edit-label"></div>
+        <div class="modal-row"><label>Action</label><textarea id="edit-action" rows="3"></textarea></div>
+        <div class="modal-row"><label>Style Class</label><input type="text" id="edit-class"></div>
+        <div class="modal-actions">
+            <button class="btn-modal btn-delete" onclick="deleteComponent()">Delete</button>
+            <button class="btn-modal btn-cancel" onclick="closeEditor()">Cancel</button>
+            <button class="btn-modal btn-save" onclick="saveComponent()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- SUPER MODE MODAL -->
+<div id="super-modal">
+    <div class="modal-content" style="text-align:center;">
+        <h2 style="margin-top:0;">Beta feature!!!!!</h2>
+        <p>This is a testing area for new capabilities.</p>
+        <button class="reveal-btn keypad-btn" onclick="closeSuperMode()" style="opacity:1; width:100%; margin-top:20px; border:1px solid #555;"><span>Close</span></button>
+    </div>
+</div>
+
+<!-- PROFILE SETTINGS MODAL -->
+<div id="profile-settings-modal" style="display:none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center;">
+    <div class="modal-content">
+        <div class="modal-header">Profile Settings</div>
+
+        <div class="modal-row">
+            <label>Profile Picture</label>
+            <input type="file" id="profile-edit-upload" accept="image/*">
+        </div>
+
+        <div class="modal-row">
+            <label>Display Name</label>
+            <input type="text" id="profile-edit-name">
+        </div>
+
+        <hr style="border-color: #444; margin: 20px 0;">
+
+        <div class="modal-row">
+            <label>Old Password</label>
+            <input type="password" id="profile-edit-old-pass" placeholder="Enter current password">
+        </div>
+        <div class="modal-row">
+            <label>New Password</label>
+            <input type="password" id="profile-edit-new-pass" placeholder="Enter new password">
+        </div>
+        <div class="modal-row">
+            <label>Confirm New Password</label>
+            <input type="password" id="profile-edit-confirm-pass" placeholder="Confirm new password">
+        </div>
+
+        <div class="modal-actions">
+            <button class="btn-modal btn-cancel" onclick="closeProfileSettings()">Cancel</button>
+            <button class="btn-modal btn-save" onclick="saveProfileSettings()">Save</button>
+        </div>
+    </div>
+</div>
+
+<!-- VARIABLE SELECTION MODAL -->
+<div id="var-modal" style="display:none;">
+    <div class="var-container">
+        <div class="var-header">
+            <span>Define Algebra Variable</span>
+            <button class="reveal-btn keypad-btn" style="width:40px; height:40px; font-size:1rem;" onclick="closeVarModal()"><span>✕</span></button>
+        </div>
+        <div class="var-grid" id="var-grid"></div>
+        <div class="var-editor" id="var-editor">
+            <span id="var-selected-label">A</span>
+            <input type="number" id="var-value-input" placeholder="Value">
+            <button class="reveal-btn keypad-btn equal-btn" style="width: 100px; opacity:1;" onclick="saveVariable()"><span>Save</span></button>
+        </div>
+    </div>
+</div>
+
+<!-- TAB SYSTEM CONTAINER -->
+<div id="tab-system" style="display:none;">
+    <div class="tab-header">
+        <div id="tabs-container" style="display:flex; overflow-x:auto;"></div>
+        <button class="tab-add-btn" onclick="addNewTab()">+</button>
+        <button class="tab-close-sys" onclick="exitTabMode()">Exit</button>
+    </div>
+    <div id="tab-content-area"></div>
+</div>
+
+<script>
+    // --- GLOBAL VARS ---
+    const modeOrder = ['basic', 'scientific', 'equation', 'advanced', 'developer', 'converter', 'memory', 'record', 'account', 'settings', 'feedback'];
+    let currentMode = 'basic';
+    let expression = '';
+    let resultDisplayed = false;
+    let effectsEnabled = true;
+    let memoryList = [];
+    let actionLog = [];
+    let isLoggedIn = false;
+    let currentUser = null;
+    let isPaidUser = false;
+    let devMode = false;
+    let currentEditElement = null;
+    let decimalPlaces = 8;
+    let userVariables = {};
+    
+    // Developer Mode Vars
+    let devExpression = '0';
+    let devBase = 10;
+    let devBits = 64;
+    let devSigned = true;
+
+    const userDatabase = {
+        "1C01": { pass: "CYL", name: "Chan Yin Lok" },
+        "1C02": { pass: "CCY", name: "Cheng Chi Yin" },
+        "1C03": { pass: "CMC", name: "Cheng Man Chun" },
+        "1C04": { pass: "CTW", name: "Cheung Tsz Wun" },
+        "1C05": { pass: "CHK", name: "Choi Hor Kiu" },
+        "1C06": { pass: "CPK", name: "Chui Pak Kiu" },
+        "1C07": { pass: "FKH", name: "Fung Ki Hong" },
+        "1C08": { pass: "FPK", name: "Fung Pak Ki" },
+        "1C09": { pass: "GYN", name: "Guo Yining" },
+        "1C10": { pass: "HSL", name: "Ho Si Long" },
+        "1C11": { pass: "LLH", name: "Lau Lok Him" },
+        "1C12": { pass: "LCS", name: "Lee Cheung Shing" },
+        "1C13": { pass: "LLT", name: "Lee Long Tin" },
+        "1C14": { pass: "LTH", name: "Lee Tsz Him" },
+        "1C15": { pass: "LTH", name: "Lee Tung Hin" },
+        "1C16": { pass: "LYL", name: "Leung Yat Long" },
+        "1C17": { pass: "LYC", name: "Liao Yat Chun" },
+        "1C18": { pass: "LSJ", name: "Lui Sze Jit" },
+        "1C19": { pass: "NLS", name: "Ngai Lok Sun Riley" },
+        "1C20": { pass: "SHH", name: "Shih Ho Hin" },
+        "1C21": { pass: "TTL", name: "Tam Tsz Long Elvin" },
+        "1C22": { pass: "TSY", name: "Tse Sing Yin" },
+        "1C23": { pass: "THM", name: "Tu Rex Hoi Ming" },
+        "1C24": { pass: "WY", name: "Wo York Ralph" },
+        "1C25": { pass: "WCH", name: "Wong Chun Hei" },
+        "1C26": { pass: "WSC", name: "Wong Sze Chun" },
+        "1C27": { pass: "XCH", name: "Xie Chun Hei" },
+        "1C28": { pass: "YCS", name: "Yeung Chun Sun Hayden" },
+        "1C29": { pass: "YHY", name: "Yeung Heung Yin" },
+        "1C30": { pass: "YLH", name: "Yin Lihao" },
+        "1C31": { pass: "YHY", name: "Yip Evan" },
+        "1C32": { pass: "YCF", name: "Young Chi Fung" },
+        "1C33": { pass: "YCT", name: "Yuen Chun Ting Hayden" },
+        "1C34": { pass: "ZJJJ", name: "Zeng Jiang Jun Jie" }
+    };
+
+    // --- DOM ELEMENTS ---
+    const basicDisplay = document.getElementById('display-basic');
+    const sciDisplay = document.getElementById('display-sci');
+    
+    // --- STARTUP ---
+    window.addEventListener('load', () => {
+        loadData();
+        document.getElementById('app').classList.add('loaded');
+        setTimeout(() => {
+            triggerCascade();
+        }, 400);
+        setupEqualButtons();
+        initDevMode();
+    });
+
+    function triggerCascade() {
+        const buttons = document.querySelectorAll('.keypad-btn, .mem-btn');
+        buttons.forEach((btn, i) => {
+            btn.classList.remove('anim-pop');
+            void btn.offsetWidth;
+            btn.style.animationDelay = `${i * 0.02}s`;
+            btn.classList.add('anim-pop');
+        });
+    }
+
+    // --- MODE SWITCHING ---
+    function switchMode(mode) {
+        const oldIndex = modeOrder.indexOf(currentMode);
+        const newIndex = modeOrder.indexOf(mode);
+        currentMode = mode;
+
+        document.querySelectorAll('.nav-btn').forEach(btn => btn.classList.remove('active'));
+        const btns = document.querySelectorAll('.nav-btn');
+        for(let b of btns) {
+            if(b.getAttribute('onclick') && b.getAttribute('onclick').includes(mode)) {
+                b.classList.add('active');
+                break;
+            }
+        }
+
+        const panels = document.querySelectorAll('.panel');
+        panels.forEach(p => { p.classList.remove('active', 'slide-up', 'slide-down', 'slide-right'); });
+
+        const newPanel = document.getElementById(`panel-${mode}`);
+        if (newIndex > oldIndex) newPanel.classList.add('slide-down');
+        else if (newIndex < oldIndex) newPanel.classList.add('slide-up');
+        
+        newPanel.classList.add('active');
+
+        if (mode === 'developer') {
+            updateDevUI();
+        }
+
+        if (mode === 'memory') {
+            updateVariablesUI();
+        }
+
+        setTimeout(() => {
+            const buttons = newPanel.querySelectorAll('.keypad-btn, .mem-btn');
+            buttons.forEach((btn, i) => {
+                btn.classList.remove('anim-pop');
+                void btn.offsetWidth;
+                btn.style.animationDelay = `${i * 0.02}s`;
+                btn.classList.add('anim-pop');
+            });
+        }, 50);
+        logAction(`Switched to ${mode} mode.`);
+    }
+
+    function toggleSidebar() { document.getElementById('sidebar').classList.toggle('expanded'); }
+
+    // --- CALCULATOR LOGIC ---
+    function getActiveDisplay() { return currentMode === 'basic' ? basicDisplay : sciDisplay; }
+    function updateDisplay(val) { const d = getActiveDisplay(); if(val === '') val = '0'; d.innerText = val; }
+    
+    function appendNum(n) { if(resultDisplayed) { expression=''; resultDisplayed=false;} expression+=n; updateDisplay(expression); logAction(`Appended number: '${n}'`); }
+    function appendOp(op) { resultDisplayed=false; expression+=op; updateDisplay(expression); logAction(`Appended operator: '${op}'`); }
+    function clearDisplay() { expression=''; updateDisplay('0'); logAction('Cleared display.'); }
+    function deleteLast() { if(resultDisplayed) expression=''; else expression=expression.slice(0,-1); updateDisplay(expression); logAction('Deleted last character.'); }
+    function toggleSign() { if(expression.startsWith('-')) expression=expression.substring(1); else expression='-'+expression; updateDisplay(expression); }
+    
+    function sciMath(type) {
+        switch(type) {
+            case 'sin': expression += 'Math.sin('; break;
+            case 'cos': expression += 'Math.cos('; break;
+            case 'tan': expression += 'Math.tan('; break;
+            case 'log': expression += 'Math.log10('; break;
+            case 'ln': expression += 'Math.log('; break;
+            case 'sqrt': expression += 'Math.sqrt('; break;
+            case 'sq': expression += '**2'; break;
+            case 'pi': expression += 'Math.PI'; break;
+            case 'e': expression += 'Math.E'; break;
+        }
+        updateDisplay(expression);
+    }
+
+    function calculate() {
+        try {
+            // Do not modify original expression for display later
+            let workExpression = expression.replace(/×/g, '*').replace(/÷/g, '/');
+
+            // Feature: Handle variable assignment like A=10
+            const assignmentMatch = workExpression.match(/^\s*([a-zA-Z])\s*=\s*(.+)$/);
+            if (assignmentMatch) {
+                const varName = assignmentMatch[1];
+                let valueExpr = assignmentMatch[2];
+                
+                // We need to evaluate the right side, which might contain other variables
+                let valueEval = preprocessAndEval(valueExpr);
+
+                userVariables[varName] = valueEval;
+                saveData(); // Persist variables
+                if(currentMode === 'memory') {
+                    updateVariablesUI();
+                }
+                
+                expression = valueEval.toString();
+                updateDisplay(expression);
+                resultDisplayed = true;
+                logAction(`Defined variable ${varName} = ${valueEval}`);
+                return; // End execution here for assignments
+            }
+
+            // For regular calculations, preprocess and evaluate
+            let res = preprocessAndEval(workExpression);
+            
+            expression = res.toString();
+            updateDisplay(expression);
+            resultDisplayed = true;
+            logAction(`Calculated: ${workExpression.replace(/\*/g, '×').replace(/\//g, '÷')} = ${res}`);
+        } catch(e) { 
+            updateDisplay("Error"); 
+            logAction(`Calculation Error on expression: "${expression}"`);
+            expression=''; 
+            resultDisplayed=true; 
+        }
+    }
+
+    function preprocessAndEval(str) {
+        // Preprocess for implicit multiplication and variables.
+        // Order is important here.
+        
+        // 1. Handle implicit multiplication between variables (e.g., AA -> A*A, AB -> A*B)
+        // This is safer if we iterate char by char.
+        let tempStr = "";
+        for (let i = 0; i < str.length; i++) {
+            const char = str[i];
+            const nextChar = str[i+1];
+            tempStr += char;
+            if (nextChar && userVariables.hasOwnProperty(char) && userVariables.hasOwnProperty(nextChar) && /[a-zA-Z]/.test(char) && /[a-zA-Z]/.test(nextChar)) {
+                 tempStr += "*";
+            }
+        }
+        str = tempStr;
+        
+        // 2. Handle implicit multiplication for number/paren followed by a variable (e.g., 2A -> 2*A, (x)A -> (x)*A)
+        str = str.replace(/([\d\)])\s*([a-zA-Z])(?!\w)/g, (match, p1, p2) => {
+             if (userVariables.hasOwnProperty(p2)) return `${p1}*${p2}`;
+             return match;
+        });
+
+        // 3. Standard syntax adjustments
+        let evalStr = str.replace(/%/g, '/100');
+        evalStr = evalStr.replace(/([0-9.]+)%/g, '($1/100)'); // Redundant, but safe
+        evalStr = evalStr.replace(/(\d|\))(?=\()/g, '$1*').replace(/(\))(?=\d)/g, '$1*');
+
+        // 4. Substitute variables with their values
+        evalStr = evalStr.replace(/(?<![.\w])([a-zA-Z])(?![.\w])/g, (match) => {
+            if (userVariables[match] !== undefined) {
+                return `(${userVariables[match]})`;
+            }
+            return match;
+        });
+        
+        if (evalStr.trim() === '') {
+            return 0;
+        }
+
+        // Evaluate the final string
+        let res = eval(evalStr);
+
+        // Apply Rounding
+        if(!Number.isInteger(res)) res = parseFloat(res.toFixed(decimalPlaces));
+        
+        return res;
+    }
+
+    // --- ADVANCED MATH (LCM/HCF) ---
+    const gcd = (a, b) => b === 0 ? a : gcd(b, a % b);
+    const lcm = (a, b) => (a * b) / gcd(a, b);
+
+    function calcAdvanced(type) {
+        const input = document.getElementById('adv-input').value;
+        const resDiv = document.getElementById('res-advanced');
+        resDiv.classList.remove('error');
+        
+        // Parse Input
+        let nums = input.split(/[\s,]+/).filter(n => n.trim() !== '').map(Number);
+        
+        if (nums.some(isNaN)) { resDiv.innerText = "Invalid Numbers"; resDiv.classList.add('error'); return; }
+        if (nums.length < 2) { resDiv.innerText = "Enter at least 2 numbers"; resDiv.classList.add('error'); return; }
+        if (nums.length > 10) { resDiv.innerText = "Max 10 numbers allowed"; resDiv.classList.add('error'); return; }
+
+        let result = nums[0];
+        if (type === 'hcf') {
+            for (let i = 1; i < nums.length; i++) result = gcd(result, nums[i]);
+            resDiv.innerText = `HCF: ${result}`;
+        } else {
+            for (let i = 1; i < nums.length; i++) result = lcm(result, nums[i]);
+            resDiv.innerText = `LCM: ${result}`;
+        }
+    }
+
+    function simplifyExpression() {
+        const input = document.getElementById('simplify-input').value;
+        const resDiv = document.getElementById('res-simplify');
+        resDiv.classList.remove('error');
+        try {
+            if (!input.trim()) {
+                resDiv.innerText = "";
+                return;
+            }
+            const result = simplifyPolynomial(input);
+            resDiv.innerText = result;
+            logDev(`Simplified '${input}' to '${result}'`);
+        } catch (e) {
+            resDiv.classList.add('error');
+            resDiv.innerText = e.message;
+            logDev(`Simplification Error: ${e.message}`);
+        }
+    }
+
+    function simplifyPolynomial(expr) {
+        // Pre-process input
+        let processed = expr.replace(/\s/g, '');
+        processed = processed.replace(/p(\d+)/g, '^$1'); // xp2 -> x^2
+        processed = processed.replace(/([a-zA-Z0-9])([a-zA-Z])/g, '$1*$2'); // 2x -> 2*x, yx->y*x
+        processed = processed.replace(/([a-zA-Z])([a-zA-Z])/g, '$1*$2'); // handle xy
+        processed = processed.replace(/\-/g, '+-');
+        if (processed.startsWith('+')) processed = processed.substring(1);
+
+        const termStrings = processed.split('+');
+        const terms = {};
+
+        for (const termStr of termStrings) {
+            if (!termStr) continue;
+
+            let mutableTermStr = termStr;
+            let coeff = 1;
+
+            if (mutableTermStr.startsWith('-')) {
+                coeff = -1;
+                mutableTermStr = mutableTermStr.substring(1);
+            }
+            
+            const vars = {};
+            const parts = mutableTermStr.split('*');
+
+            for (let part of parts) {
+                if (!part) continue;
+                
+                if (!isNaN(part)) {
+                    coeff *= parseFloat(part);
+                } else {
+                    const [variable, powerStr] = part.split('^');
+                    if (!/^[a-zA-Z][a-zA-Z0-9]*$/.test(variable)) throw new Error(`Invalid variable: '${variable}'`);
+                    const power = powerStr ? parseInt(powerStr) : 1;
+                    vars[variable] = (vars[variable] || 0) + power;
+                }
+            }
+            
+            const sortedVars = Object.keys(vars).sort();
+            let key = sortedVars.map(v => (vars[v] === 1) ? v : `${v}^${vars[v]}`).filter(s => s).join('*');
+            
+            terms[key] = (terms[key] || 0) + coeff;
+        }
+
+        // Reconstruct
+        const sortedKeys = Object.keys(terms).sort((a, b) => {
+            const degA = a.split('*').reduce((sum, p) => sum + (parseInt(p.split('^')[1] || '1')), 0);
+            const degB = b.split('*').reduce((sum, p) => sum + (parseInt(p.split('^')[1] || '1')), 0);
+            if (degA !== degB) return degB - degA; // Higher degree first
+            if (a.length !== b.length) return b.length - a.length; // More variables first
+            return a.localeCompare(b);
+        });
+
+        let resultParts = [];
+        for (const key of sortedKeys) {
+            const coeff = terms[key];
+            if (Math.abs(coeff) < 1e-9) continue;
+            const absCoeff = Math.abs(coeff);
+            let partStr = (key === '') ? absCoeff.toString() : ((absCoeff === 1) ? key : `${absCoeff}*${key}`);
+            resultParts.push({ sign: coeff > 0 ? '+' : '-', str: partStr });
+        }
+
+        if (resultParts.length === 0) return '0';
+        let resultStr = resultParts.map(p => `${p.sign} ${p.str}`).join(' ');
+        if (resultStr.startsWith('+ ')) resultStr = resultStr.substring(2);
+        if (resultStr.startsWith('- ')) resultStr = '-' + resultStr.substring(2);
+        return resultStr;
+    }
+
+    // --- DEVELOPER MODE LOGIC ---
+    function initDevMode() {
+        const grid = document.getElementById('bit-grid');
+        for(let i=63; i>=0; i--) {
+            const btn = document.createElement('button');
+            btn.className = 'bit-btn reveal-btn';
+            btn.innerHTML = '<span>0</span>';
+            btn.onclick = () => toggleBit(i);
+            btn.title = `Bit ${i}`;
+            grid.appendChild(btn);
+            if (i % 16 === 0 && i !== 0) {
+                // Optional spacer or break if needed, grid handles it mostly
+            }
+        }
+    }
+
+    function toggleBitKeypad() {
+        const grid = document.getElementById('bit-grid');
+        if (grid.style.display === 'none' || grid.style.display === '') grid.style.display = 'grid';
+        else grid.style.display = 'none';
+    }
+
+    function setDevBase(b) {
+        devBase = b;
+        document.querySelectorAll('.radix-row').forEach(r => r.classList.remove('active'));
+        if(b===16) document.getElementById('row-hex').classList.add('active');
+        if(b===10) document.getElementById('row-dec').classList.add('active');
+        if(b===8) document.getElementById('row-oct').classList.add('active');
+        if(b===2) document.getElementById('row-bin').classList.add('active');
+        
+        // Update Keypad State
+        const hexBtns = document.querySelectorAll('.dev-hex-btn');
+        hexBtns.forEach(btn => {
+            const val = btn.innerText.trim();
+            if (b === 10 || b === 8 || b === 2) btn.disabled = true;
+            else btn.disabled = false;
+        });
+        
+        // Additional disabling for Oct/Bin
+        document.querySelectorAll('#keypad-dev .keypad-btn').forEach(btn => {
+            const txt = btn.innerText.trim();
+            if (['2','3','4','5','6','7','8','9'].includes(txt)) {
+                if (b === 2) btn.disabled = true;
+                else if (b === 8 && (txt === '8' || txt === '9')) btn.disabled = true;
+                else btn.disabled = false;
+            }
+        });
+    }
+
+    function cycleWordSize() {
+        if(devBits === 64) devBits = 32;
+        else if(devBits === 32) devBits = 16;
+        else if(devBits === 16) devBits = 8;
+        else devBits = 64;
+        
+        const labels = {64:'QWORD', 32:'DWORD', 16:'WORD', 8:'BYTE'};
+        document.getElementById('btn-word-size').innerText = labels[devBits];
+        updateDevUI();
+    }
+
+    function toggleDevSigned() {
+        devSigned = !devSigned;
+        document.getElementById('btn-signed').classList.toggle('active', devSigned);
+        updateDevUI();
+    }
+
+    function appendDev(val) {
+        if(devExpression === '0') devExpression = '';
+        devExpression += val;
+        updateDevUI();
+    }
+
+    function devMath(op) {
+        if (op === 'NEG') {
+            // Wrap current expression in -(...)
+            devExpression = `-(${devExpression})`;
+        } else {
+            devExpression += op;
+        }
+        updateDevUI();
+    }
+    
+    function devBackspace() {
+        devExpression = devExpression.slice(0, -1);
+        if(devExpression === '') devExpression = '0';
+        updateDevUI();
+    }
+    
+    function clearDev() {
+        devExpression = '0';
+        updateDevUI();
+    }
+
+    function devBitwise(op) {
+        const map = { 'AND': '&', 'OR': '|', 'XOR': '^', 'NOT': '~', 'LSH': '<<', 'RSH': '>>' };
+        if (map[op]) devExpression += map[op];
+        else if (op === 'ROL' || op === 'ROR') {
+            // Not directly supported in expression string easily without function
+            // For simplicity in this version, we might skip or implement a wrapper
+            alert("Rotation not supported in expression mode yet.");
+        }
+        updateDevUI();
+    }
+
+    function getDevValue() {
+        try {
+            // Replace numbers with BigInts (suffix n)
+            // Regex to find numbers (hex, bin, oct, dec) and append n
+            // This is a simplified parser.
+            let expr = devExpression.replace(/0x[0-9A-Fa-f]+/g, m => m+'n')
+                                    .replace(/0b[01]+/g, m => m+'n')
+                                    .replace(/\b\d+\b/g, m => m+'n');
+            
+            // Evaluate
+            let val = eval(expr); // Safe-ish for local calc
+            if (typeof val !== 'bigint') val = BigInt(Math.floor(val));
+            
+            // Mask to word size
+            const mask = (1n << BigInt(devBits)) - 1n;
+            return val & mask;
+        } catch(e) {
+            return 0n;
+        }
+    }
+
+    function updateDevUI() {
+        const val = getDevValue();
+        const mask = (1n << BigInt(devBits)) - 1n;
+        
+        // Display Main
+        let displayVal = val;
+        if (devSigned) {
+            const maxPos = 1n << (BigInt(devBits) - 1n);
+            if (val >= maxPos) displayVal = val - (1n << BigInt(devBits));
+        }
+        
+        document.getElementById('display-dev').innerText = displayVal.toString(devBase).toUpperCase();
+
+        // Update Radix Rows
+        document.getElementById('val-hex').innerText = (val).toString(16).toUpperCase();
+        document.getElementById('val-dec').innerText = displayVal.toString(10);
+        document.getElementById('val-oct').innerText = (val).toString(8);
+        document.getElementById('val-bin').innerText = (val).toString(2);
+
+        // Update Bits
+        const bitBtns = document.getElementById('bit-grid').children;
+        for(let i=0; i<64; i++) {
+            const bitIndex = 63 - i; // Grid is 63..0
+            const bitVal = (val >> BigInt(bitIndex)) & 1n;
+            const btn = bitBtns[i];
+            btn.querySelector('span').innerText = bitVal.toString();
+            btn.className = bitVal ? 'bit-btn on reveal-btn' : 'bit-btn reveal-btn';
+            btn.style.opacity = (bitIndex < devBits) ? '1' : '0.2';
+        }
+    }
+
+    function toggleBit(index) {
+        let val = getDevValue();
+        const mask = 1n << BigInt(index);
+        val = val ^ mask;
+        
+        // Update expression to this new value
+        devExpression = val.toString();
+        updateDevUI();
+    }
+    
+    function calcDev() {
+        try {
+            const val = getDevValue();
+            devExpression = val.toString();
+            updateDevUI();
+        } catch(e) {
+            document.getElementById('display-dev').innerText = "Error";
+        }
+    }
+
+    function devAscii() {
+        const val = Number(getDevValue() & 0xFFn); // Only low byte
+        const char = String.fromCharCode(val);
+        alert(`ASCII Code ${val} = '${char}'`);
+    }
+
+    // --- ROUNDING SETTING ---
+    function updateRounding() {
+        const input = document.getElementById('rounding-input');
+        let val = parseInt(input.value);
+        if (!devMode) {
+            if (val < 0) val = 0;
+            if (val > 10) val = 10;
+            input.value = val;
+        }
+        decimalPlaces = val;
+        logDev(`Rounding set to ${decimalPlaces}`);
+    }
+
+    // --- GLOW RADIUS SETTING ---
+    function updateGlowRadius() {
+        const val = document.getElementById('glow-radius-input').value;
+        const px = (val * 20) + 10;
+        document.documentElement.style.setProperty('--glow-radius', px + 'px');
+    }
+
+    // --- DEV MODE LOGIC ---
+    function toggleDevMode() {
+        devMode = document.getElementById('dev-toggle').checked;
+        const consoleDiv = document.getElementById('dev-console');
+        consoleDiv.style.display = devMode ? 'flex' : 'none';
+        
+        if(devMode) {
+            document.body.classList.add('dev-active');
+            document.querySelectorAll('.display-screen').forEach(d => d.contentEditable = true);
+        } else {
+            document.body.classList.remove('dev-active');
+            document.querySelectorAll('.display-screen').forEach(d => d.contentEditable = false);
+            updateRounding();
+        }
+        logDev(`Dev Mode: ${devMode}`);
+    }
+
+    function logDev(msg) {
+        if(!devMode) return;
+        const consoleLog = document.getElementById('dev-console-log');
+        const entry = document.createElement('div');
+        entry.className = 'log-entry';
+        entry.innerHTML = `<span class="log-time">[${new Date().toLocaleTimeString()}]</span> ${msg}`;
+        consoleLog.appendChild(entry);
+        consoleLog.scrollTop = consoleLog.scrollHeight;
+    }
+
+    // Interceptor for editing buttons (FIXED: Excludes menu-list-btn)
+    document.addEventListener('click', function(e) {
+        if (!devMode) return;
+        const btn = e.target.closest('.reveal-btn');
+        if (btn && (btn.classList.contains('keypad-btn') || btn.classList.contains('mem-btn')) && !btn.classList.contains('menu-list-btn')) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            openEditor(btn);
+        }
+    }, true);
+
+    function openEditor(el) {
+        currentEditElement = el;
+        const span = el.querySelector('span') || el;
+        document.getElementById('edit-label').value = span.innerText || el.innerText;
+        document.getElementById('edit-action').value = el.getAttribute('onclick');
+        let classes = [];
+        if(el.classList.contains('accent')) classes.push('accent');
+        if(el.classList.contains('equal-btn')) classes.push('equal-btn');
+        document.getElementById('edit-class').value = classes.join(' ');
+        document.getElementById('dev-modal').style.display = 'flex';
+    }
+
+    function closeEditor() { document.getElementById('dev-modal').style.display = 'none'; currentEditElement = null; }
+    function saveComponent() {
+        if(!currentEditElement) return;
+        const label = document.getElementById('edit-label').value;
+        const action = document.getElementById('edit-action').value;
+        const cls = document.getElementById('edit-class').value;
+        const span = currentEditElement.querySelector('span');
+        if(span) span.innerText = label; else currentEditElement.innerText = label;
+        currentEditElement.setAttribute('onclick', action);
+        currentEditElement.classList.remove('accent', 'equal-btn');
+        if(cls.includes('accent')) currentEditElement.classList.add('accent');
+        if(cls.includes('equal-btn')) currentEditElement.classList.add('equal-btn');
+        closeEditor();
+    }
+    function deleteComponent() { if(currentEditElement) { currentEditElement.remove(); closeEditor(); } }
+    function addNewButton(containerId) {
+        const container = document.getElementById(containerId);
+        const btn = document.createElement('button');
+        btn.className = 'reveal-btn keypad-btn anim-pop';
+        btn.setAttribute('onclick', "appendNum('0')");
+        btn.innerHTML = '<span>New</span>';
+        const placeholder = container.querySelector('.add-btn-placeholder');
+        container.insertBefore(btn, placeholder);
+    }
+
+    // --- MEMORY & VARIABLES ---
+    function memStore() { let v=parseFloat(expression); if(!isNaN(v)) { memoryList.unshift(v); resultDisplayed=true; logAction(`Stored to memory: ${v}`); } }
+    function memRecall() { if(memoryList.length){ expression=memoryList[0].toString(); updateDisplay(expression); logAction(`Recalled from memory: ${memoryList[0]}`); } }
+    function memAdd() { if(memoryList.length){ memoryList[0]+=parseFloat(expression||0); resultDisplayed=true; logAction(`Added to memory: ${expression||0}`); } else memStore(); }
+    function memSub() { if(memoryList.length){ memoryList[0]-=parseFloat(expression||0); resultDisplayed=true; logAction(`Subtracted from memory: ${expression||0}`); } else { memoryList.unshift(-parseFloat(expression||0)); } }
+    function memClear() { memoryList=[]; logAction('Cleared all memory.'); }
+
+    function clearAllVariables() {
+        userVariables = {};
+        saveData();
+        updateVariablesUI();
+        logAction('Cleared all variables.');
+    }
+
+    function clearVariable(varName) {
+        delete userVariables[varName];
+        saveData();
+        updateVariablesUI();
+        logAction(`Cleared variable ${varName}.`);
+    }
+
+    function updateVariablesUI() {
+        const container = document.getElementById('variable-container');
+        if (!container) return; // Exit if the container is not on the current panel
+        container.innerHTML = '';
+        const variables = Object.keys(userVariables);
+        if (variables.length === 0) {
+            container.innerHTML = '<div style="text-align:center;color:#666;margin-top:50px;">No variables stored. Use format: A=10</div>';
+        } else {
+            variables.sort().forEach(varName => {
+                const val = userVariables[varName];
+                let item = document.createElement('div');
+                item.className = 'memory-item'; // reuse existing style
+                item.style.cursor = 'pointer';
+                                    item.innerHTML = `<div>
+                                    <span class="mem-val" style="font-size: 1.8rem; color: var(--accent-color); flex-grow: 0; margin-right: 15px;">${varName}</span>
+                                    <span class="mem-val" style="font-size: 1.8rem; flex-grow: 1; text-align: left;">= ${val}</span>
+                                    <button class="reveal-btn" style="width: 40px; height: 40px; border-radius: 50%; padding: 0; min-width: 40px; flex-shrink: 0;" onclick="clearVariable('${varName}')"><i class="fas fa-times"></i></button>
+                                </div>`;                item.addEventListener('click', (e) => {
+                    if (e.target.tagName !== 'BUTTON' && !e.target.closest('button')) {
+                        appendNum(varName); 
+                        switchMode('basic'); 
+                    }
+                });
+                container.appendChild(item);
+            });
+        }
+    }
+
+    // --- CONVERTER ---
+    const converterData = {
+        length: { units: { m: 1, km: 1000, cm: 0.01, mm: 0.001, in: 0.0254, ft: 0.3048, yd: 0.9144, mi: 1609.34, nmi: 1852 }, labels: { m: 'Meters', km: 'Kilometers', cm: 'Centimeters', mm: 'Millimeters', in: 'Inches', ft: 'Feet', yd: 'Yards', mi: 'Miles', nmi: 'Nautical Miles' } },
+        mass: { units: { kg: 1, g: 0.001, mg: 0.000001, lb: 0.453592, oz: 0.0283495, t: 1000, st: 6.35029 }, labels: { kg: 'Kilograms', g: 'Grams', mg: 'Milligrams', lb: 'Pounds', oz: 'Ounces', t: 'Metric Tons', st: 'Stone' } },
+        volume: { units: { l: 1, ml: 0.001, m3: 1000, gal: 3.78541, qt: 0.946353, pt: 0.473176, cup: 0.236588, fl_oz: 0.0295735 }, labels: { l: 'Liters', ml: 'Milliliters', m3: 'Cubic Meters', gal: 'Gallons (US)', qt: 'Quarts (US)', pt: 'Pints (US)', cup: 'Cups', fl_oz: 'Fluid Oz' } },
+        area: { units: { m2: 1, ha: 10000, km2: 1000000, ft2: 0.092903, ac: 4046.86, mi2: 2589988 }, labels: { m2: 'Square Meters', ha: 'Hectares', km2: 'Square KM', ft2: 'Square Feet', ac: 'Acres', mi2: 'Square Miles' } },
+        speed: { units: { kmh: 1, mph: 1.60934, ms: 3.6, kn: 1.852, mach: 1234.8 }, labels: { kmh: 'Km/h', mph: 'Miles/h', ms: 'Meters/s', kn: 'Knots', mach: 'Mach (Std)' } },
+        time: { units: { s: 1, min: 60, h: 3600, d: 86400, wk: 604800, y: 31536000 }, labels: { s: 'Seconds', min: 'Minutes', h: 'Hours', d: 'Days', wk: 'Weeks', y: 'Years' } },
+        money: { units: { usd: 1, eur: 1.05, gbp: 1.26, jpy: 0.0067, cny: 0.14, inr: 0.012, cad: 0.73, aud: 0.65, hkd: 0.128 }, labels: { usd: 'USD ($)', eur: 'EUR (€)', gbp: 'GBP (£)', jpy: 'JPY (¥)', cny: 'CNY (¥)', inr: 'INR (₹)', cad: 'CAD ($)', aud: 'AUD ($)', hkd: 'HKD ($)' } }
+    };
+
+    function updateConverterUI() {
+        const cat = document.getElementById('conv-category').value;
+        const fromSel = document.getElementById('conv-from');
+        const toSel = document.getElementById('conv-to');
+        const unitUI = document.getElementById('unit-ui');
+        const tipUI = document.getElementById('tip-ui');
+
+        if (cat === 'tip') { unitUI.style.display = 'none'; tipUI.style.display = 'block'; return; } 
+        else { unitUI.style.display = 'block'; tipUI.style.display = 'none'; }
+
+        fromSel.innerHTML = ''; toSel.innerHTML = '';
+
+        if (cat === 'temp') {
+            const opts = [['c', 'Celsius'], ['f', 'Fahrenheit'], ['k', 'Kelvin']];
+            opts.forEach(o => { fromSel.add(new Option(o[1], o[0])); toSel.add(new Option(o[1], o[0])); });
+            toSel.value = 'f'; 
+        } else if (converterData[cat]) {
+            const data = converterData[cat];
+            for (let key in data.units) { fromSel.add(new Option(data.labels[key] || key, key)); toSel.add(new Option(data.labels[key] || key, key)); }
+            if(toSel.options.length > 1) toSel.selectedIndex = 1;
+        }
+        runConversion();
+    }
+
+    function runConversion() {
+        const cat = document.getElementById('conv-category').value;
+        if(cat === 'tip') return;
+        const val = parseFloat(document.getElementById('conv-input').value);
+        const from = document.getElementById('conv-from').value;
+        const to = document.getElementById('conv-to').value;
+        const out = document.getElementById('conv-output');
+        if (isNaN(val)) { out.value = ''; return; }
+
+        if (cat === 'temp') {
+            let cVal; 
+            if (from === 'c') cVal = val; else if (from === 'f') cVal = (val - 32) * 5/9; else if (from === 'k') cVal = val - 273.15;
+            let res;
+            if (to === 'c') res = cVal; else if (to === 'f') res = (cVal * 9/5) + 32; else if (to === 'k') res = cVal + 273.15;
+            out.value = parseFloat(res.toFixed(4));
+        } else {
+            const data = converterData[cat];
+            const baseVal = val * data.units[from];
+            const result = baseVal / data.units[to];
+            out.value = parseFloat(result.toFixed(decimalPlaces));
+        }
+    }
+
+    function calcTip() {
+        const bill = parseFloat(document.getElementById('tip-bill').value) || 0;
+        const percent = parseFloat(document.getElementById('tip-percent').value) || 0;
+        const people = parseFloat(document.getElementById('tip-people').value) || 1;
+        const tipAmt = bill * (percent / 100);
+        const total = bill + tipAmt;
+        const perPerson = total / (people > 0 ? people : 1);
+        document.getElementById('res-tip-amount').innerText = '$' + tipAmt.toFixed(2);
+        document.getElementById('res-tip-total').innerText = '$' + total.toFixed(2);
+        document.getElementById('res-tip-person').innerText = '$' + perPerson.toFixed(2);
+    }
+
+    // --- ALGEBRA & SETTINGS ---
+    function toggleEquationType() {
+        const t=document.getElementById('eq-type').value;
+        document.getElementById('ui-quadratic').style.display = t==='quadratic'?'block':'none';
+        document.getElementById('ui-system').style.display = t==='system'?'block':'none';
+    }
+    function setAccent(c, el) { document.documentElement.style.setProperty('--accent-color', c); document.querySelectorAll('.color-option').forEach(x=>x.classList.remove('selected')); if(el) el.classList.add('selected'); }
+    function setCustomAccent(c) { setAccent(c); document.getElementById('custom-wrapper').classList.add('selected'); }
+    function setBg(c) { document.documentElement.style.setProperty('--bg-color', c); }
+    function setBtnColor(c) { document.documentElement.style.setProperty('--btn-bg', c); }
+    function toggleEffects() { document.body.classList.toggle('no-effects', !document.getElementById('effect-toggle').checked); }
+    
+    function toggleNonMetro() {
+        const isNonMetro = document.getElementById('non-metro-toggle').checked;
+        document.body.classList.toggle('non-metro', isNonMetro);
+        logAction(`Non-Metro Style: ${isNonMetro}`);
+    }
+    
+    function toggleTopBar() {
+        const isTop = document.getElementById('top-bar-toggle').checked;
+        document.getElementById('app').classList.toggle('top-menu', isTop);
+    }
+    
+    function loginUser() { 
+        const u = document.getElementById('login-username').value;
+        const p = document.getElementById('login-password').value;
+        
+        const user = userDatabase[u];
+
+        if (user && user.pass === p) {
+            document.getElementById('login-box').style.display='none'; 
+            document.getElementById('profile-box').style.display='block';
+            document.getElementById('welcome-message').innerText = `Hello , ${user.name} !`;
+            isLoggedIn = true;
+            currentUser = u;
+            logAction(`User logged in as '${user.name}'.`);
+        } else {
+            alert("Invalid Username or Password");
+        }
+    }
+    function logoutUser() { 
+        document.getElementById('login-box').style.display='block'; 
+        document.getElementById('profile-box').style.display='none'; 
+        logAction("User signed out.");
+        isLoggedIn = false;
+        currentUser = null;
+        closePaidFeature();
+        saveData();
+    }
+
+    function openProfileSettings() {
+        if (!currentUser || !userDatabase[currentUser]) return;
+
+        const user = userDatabase[currentUser];
+        document.getElementById('profile-edit-name').value = user.name;
+        
+        // Clear password fields
+        document.getElementById('profile-edit-old-pass').value = '';
+        document.getElementById('profile-edit-new-pass').value = '';
+        document.getElementById('profile-edit-confirm-pass').value = '';
+        document.getElementById('profile-edit-upload').value = ''; // Clear file input
+
+        document.getElementById('profile-settings-modal').style.display = 'flex';
+    }
+
+    function closeProfileSettings() {
+        document.getElementById('profile-settings-modal').style.display = 'none';
+    }
+
+    function saveProfileSettings() {
+        if (!currentUser || !userDatabase[currentUser]) return;
+        const user = userDatabase[currentUser];
+        
+        // Name
+        const newName = document.getElementById('profile-edit-name').value.trim();
+        if (newName && newName !== user.name) {
+            user.name = newName;
+            document.getElementById('welcome-message').innerText = `Hello , ${newName} !`;
+            logAction(`Display name changed to '${newName}'.`);
+        }
+
+        // Password
+        const oldPass = document.getElementById('profile-edit-old-pass').value;
+        const newPass = document.getElementById('profile-edit-new-pass').value;
+        const confirmPass = document.getElementById('profile-edit-confirm-pass').value;
+        let passwordChanged = false;
+        if (oldPass || newPass || confirmPass) {
+            if (oldPass !== user.pass) {
+                alert("Incorrect old password.");
+                return;
+            }
+            if (!newPass) {
+                alert("New password cannot be empty.");
+                return;
+            }
+            if (newPass !== confirmPass) {
+                alert("New passwords do not match.");
+                return;
+            }
+            user.pass = newPass;
+            passwordChanged = true;
+        }
+
+        // Picture
+        const profileUploadInput = document.getElementById('profile-edit-upload');
+        const hasNewPicture = profileUploadInput.files && profileUploadInput.files[0];
+
+        const finishSave = () => {
+            if (passwordChanged) logAction(`Password changed.`);
+            saveData();
+            closeProfileSettings();
+            alert("Profile updated successfully!");
+        };
+
+        if (hasNewPicture) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('default-avatar').style.display = 'none';
+                const img = document.getElementById('custom-avatar');
+                img.src = e.target.result;
+                img.style.display = 'block';
+                logAction("Profile badge updated.");
+                finishSave();
+            }
+            reader.readAsDataURL(profileUploadInput.files[0]);
+        } else {
+            finishSave();
+        }
+    }
+    
+    function openPaidFeature() {
+        document.getElementById('profile-box').style.display = 'none';
+        document.getElementById('paid-feature-page').style.display = 'block';
+        if(isPaidUser) {
+            document.getElementById('payment-section').style.display = 'none';
+            document.getElementById('glow-customizer').style.display = 'block';
+        } else {
+            document.getElementById('payment-section').style.display = 'block';
+            document.getElementById('glow-customizer').style.display = 'none';
+        }
+    }
+
+    function closePaidFeature() {
+        document.getElementById('paid-feature-page').style.display = 'none';
+        if(isLoggedIn) document.getElementById('profile-box').style.display = 'block';
+        else document.getElementById('login-box').style.display = 'block';
+    }
+
+    function simulatePayment(method, btn) {
+        const span = btn.querySelector('span');
+        const originalText = span.innerHTML;
+        span.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Processing...';
+        setTimeout(() => {
+            isPaidUser = true;
+            logAction(`Payment successful via ${method}`);
+            alert(`Payment successful via ${method}! You can now customize the glow effect.`);
+            openPaidFeature();
+            span.innerHTML = originalText;
+        }, 1500);
+    }
+
+    function setGlowColor(hex) {
+        const r = parseInt(hex.substr(1,2), 16), g = parseInt(hex.substr(3,2), 16), b = parseInt(hex.substr(5,2), 16);
+        document.documentElement.style.setProperty('--border-glow', `rgba(${r}, ${g}, ${b}, 0.8)`);
+        document.documentElement.style.setProperty('--surface-glow', `rgba(${r}, ${g}, ${b}, 0.3)`);
+        logAction(`Glow color changed to ${hex}`);
+    }
+    
+    function resetGlowColor() {
+        document.documentElement.style.setProperty('--border-glow', 'rgba(255, 255, 255, 0.6)');
+        document.documentElement.style.setProperty('--surface-glow', 'rgba(255, 255, 255, 0.15)');
+        logAction('Glow color reset to default');
+    }
+    
+    function openAboutPage() { document.getElementById('panel-settings').classList.remove('active'); document.getElementById('panel-about').classList.add('active', 'slide-up'); }
+    function closeAboutPage() { document.getElementById('panel-about').classList.remove('active', 'slide-up'); document.getElementById('panel-settings').classList.add('active', 'slide-down'); }
+
+    // --- ACTION RECORDER & DEV CONSOLE COMMANDS ---
+    function logAction(msg) {
+        if (!isLoggedIn) return;
+        const timestamp = new Date().toLocaleTimeString();
+        actionLog.unshift({ time: timestamp, message: msg });
+        if (actionLog.length > 200) actionLog.pop();
+        updateRecordDisplay();
+        saveData();
+    }
+    function updateRecordDisplay() {
+        const container = document.getElementById('record-container');
+        if (!container) return;
+        container.innerHTML = actionLog.length === 0 ? '<div class="record-entry"><span class="record-time">[SYSTEM]</span><span class="record-msg"> No actions recorded yet.</span></div>' : actionLog.map(entry => `<div class="record-entry"><span class="record-time">[${entry.time}]</span><span class="record-msg"> ${entry.message}</span></div>`).join('');
+    }
+    function handleConsoleInput(event) {
+        if (event.key === 'Enter') {
+            const input = document.getElementById('dev-console-input');
+            const command = input.value.trim();
+            if (command) { logDev(`> ${command}`); processCommand(command); input.value = ''; }
+        }
+    }
+    function processCommand(command) {
+        if (command === 'show[record]') {
+            document.getElementById('nav-btn-record').style.display = 'flex';
+            logDev("Command successful: 'Record' tab is now visible.");
+        } else if (command === 'feature[tabview]') {
+            document.getElementById('setting-tabview-row').style.display = 'flex';
+            logDev("Feature Unlocked: Multi-Tab Mode enabled in Settings.");
+            alert("Feature Unlocked: Check Settings > Multi-Tab Mode");
+        } else { logDev("Unknown command."); }
+    }
+
+    // --- EXPORT FEATURE ---
+    function exportRecord() {
+        if(!isLoggedIn) { alert("Please sign in to export records."); return; }
+        if(actionLog.length === 0) { alert("No records to export."); return; }
+        
+        let content = "METRO CALCULATOR - ACTION RECORD\n";
+        content += "User: Cheng Man Chun\n";
+        content += "Date: " + new Date().toLocaleString() + "\n";
+        content += "--------------------------------\n\n";
+        
+        actionLog.forEach(entry => { content += `[${entry.time}] ${entry.message}\n`; });
+        
+        const blob = new Blob([content], { type: 'text/plain' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'calculator_record.txt';
+        document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
+        logAction("Exported record to file.");
+    }
+
+    // --- DATA PERSISTENCE (COOKIES/LOCALSTORAGE) ---
+    function saveData() {
+        const data = {
+            actionLog: actionLog,
+            isLoggedIn: isLoggedIn,
+            isPaidUser: isPaidUser,
+            profileImage: document.getElementById('custom-avatar').src,
+            glowBorder: document.documentElement.style.getPropertyValue('--border-glow'),
+            glowSurface: document.documentElement.style.getPropertyValue('--surface-glow'),
+            userVariables: userVariables,
+            nonMetro: document.getElementById('non-metro-toggle').checked
+        };
+        localStorage.setItem('metroCalcData', JSON.stringify(data));
+    }
+
+    function loadData() {
+        const json = localStorage.getItem('metroCalcData');
+        if(!json) return;
+        try {
+            const data = JSON.parse(json);
+            if(data.actionLog) { actionLog = data.actionLog; updateRecordDisplay(); }
+            if(data.isLoggedIn) { isLoggedIn = true; document.getElementById('login-box').style.display='none'; document.getElementById('profile-box').style.display='block'; }
+            if(data.isPaidUser) isPaidUser = true;
+            if(data.profileImage && data.profileImage.startsWith('data:image')) { document.getElementById('default-avatar').style.display = 'none'; const img = document.getElementById('custom-avatar'); img.src = data.profileImage; img.style.display = 'block'; }
+            if(data.glowBorder) document.documentElement.style.setProperty('--border-glow', data.glowBorder);
+            if(data.glowSurface) document.documentElement.style.setProperty('--surface-glow', data.glowSurface);
+            if(data.userVariables) userVariables = data.userVariables;
+            if(data.nonMetro) {
+                document.getElementById('non-metro-toggle').checked = true;
+                toggleNonMetro();
+            }
+        } catch(e) { console.error("Load error", e); }
+    }
+
+    // --- PROFILE IMAGE ---
+    function triggerProfileUpload() { document.getElementById('profile-upload').click(); }
+    
+    function updateProfileImage(input) {
+        if (input.files && input.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                document.getElementById('default-avatar').style.display = 'none';
+                const img = document.getElementById('custom-avatar');
+                img.src = e.target.result;
+                img.style.display = 'block';
+                logAction("Profile badge updated.");
+            }
+            reader.readAsDataURL(input.files[0]);
+        }
+    }
+
+    // --- SMART EQUATION PARSER ---
+    function preprocessMath(str) {
+        str = str.replace(/\s+/g, '');
+        str = str.replace(/÷/g, '/'); // Support Divide Symbol
+        str = str.replace(/(\d)([a-z\(])/g, '$1*$2');
+        str = str.replace(/(\))([\da-z\(])/g, '$1*$2');
+        str = str.replace(/([a-z])(\()/g, '$1*$2');
+        str = str.replace(/\^/g, '**');
+        return str;
+    }
+
+    function getCoefficientsQuadratic(eqStr) {
+        if(!eqStr.includes('=')) throw new Error("Missing '='");
+        let parts = eqStr.split('=');
+        if(parts.length > 2) throw new Error("Too many '='");
+        
+        let lhs = preprocessMath(parts[0]);
+        let rhs = preprocessMath(parts[1]);
+        let expr = `(${lhs}) - (${rhs})`;
+
+        function evalAt(xVal) {
+            let e = expr.replace(/\b[x]\b/g, `(${xVal})`);
+            try { return eval(e); } catch(err) { throw new Error("Invalid Syntax"); }
+        }
+
+        let c = evalAt(0);
+        let f1 = evalAt(1);
+        let f_1 = evalAt(-1);
+
+        let a = (f1 + f_1 - 2*c) / 2;
+        let b = (f1 - f_1) / 2;
+
+        const clean = (n) => Math.abs(n) < 1e-9 ? 0 : parseFloat(n.toFixed(8));
+        return { x2: clean(a), x: clean(b), c: clean(c) };
+    }
+
+    function getCoefficientsLinear(eqStr) {
+        if(!eqStr.includes('=')) throw new Error("Missing '='");
+        let parts = eqStr.split('=');
+        let lhs = preprocessMath(parts[0]);
+        let rhs = preprocessMath(parts[1]);
+        let expr = `(${lhs}) - (${rhs})`;
+
+        function evalAt(x, y, z) {
+            let e = expr.replace(/\bx\b/g, `(${x})`).replace(/\by\b/g, `(${y})`).replace(/\bz\b/g, `(${z})`);
+            try { return eval(e); } catch(err) { throw new Error("Invalid Syntax"); }
+        }
+
+        let d = evalAt(0,0,0);
+        let a = evalAt(1,0,0) - d;
+        let b = evalAt(0,1,0) - d;
+        let c = evalAt(0,0,1) - d;
+
+        const clean = (n) => Math.abs(n) < 1e-9 ? 0 : parseFloat(n.toFixed(8));
+        return { x: clean(a), y: clean(b), z: clean(c), c: clean(d) };
+    }
+
+    function solveQuadraticManual() {
+        const resDiv = document.getElementById('res-quadratic');
+        resDiv.classList.remove('error');
+        logDev("Solving Quadratic...");
+        try {
+            const input = document.getElementById('q-input').value;
+            if(!input.trim()) throw new Error("Empty Input");
+            
+            const coeffs = getCoefficientsQuadratic(input);
+            const A = coeffs.x2, B = coeffs.x, C = coeffs.c;
+
+            if (A === 0) {
+                if (B === 0) resDiv.innerText = (C === 0) ? "True for all x" : "No Solution";
+                else resDiv.innerText = `Linear: x = ${parseFloat((-C/B).toFixed(4))}`;
+                return;
+            }
+
+            const d = B*B - 4*A*C;
+            if (d > 0) {
+                const x1 = (-B + Math.sqrt(d)) / (2*A);
+                const x2 = (-B - Math.sqrt(d)) / (2*A);
+                resDiv.innerText = `x₁ = ${parseFloat(x1.toFixed(4))}, x₂ = ${parseFloat(x2.toFixed(4))}`;
+            } else if (d === 0) {
+                const x = -B / (2*A);
+                resDiv.innerText = `x = ${parseFloat(x.toFixed(4))}`;
+            } else {
+                resDiv.innerText = "No Real Solutions";
+            }
+            logDev("Quadratic Solved");
+        } catch (e) {
+            resDiv.classList.add('error');
+            resDiv.innerText = e.message;
+            logDev(`Error: ${e.message}`);
+        }
+    }
+
+    function solveSystemManual() {
+        const resDiv = document.getElementById('res-system');
+        resDiv.classList.remove('error');
+        logDev("Solving System...");
+        try {
+            const i1 = document.getElementById('s-input1').value;
+            const i2 = document.getElementById('s-input2').value;
+            const i3 = document.getElementById('s-input3').value;
+
+            if(!i1.trim() || !i2.trim()) throw new Error("Enter at least 2 equations");
+
+            const eq1 = getCoefficientsLinear(i1);
+            const eq2 = getCoefficientsLinear(i2);
+            const hasEq3 = i3.trim().length > 0;
+
+            if (!hasEq3) {
+                const a1 = eq1.x, b1 = eq1.y, c1 = -eq1.c;
+                const a2 = eq2.x, b2 = eq2.y, c2 = -eq2.c;
+                const det = a1*b2 - a2*b1;
+                if (Math.abs(det) < 1e-9) resDiv.innerText = "No unique solution";
+                else {
+                    const x = (c1*b2 - c2*b1) / det;
+                    const y = (a1*c2 - a2*c1) / det;
+                    resDiv.innerText = `x = ${parseFloat(x.toFixed(4))}, y = ${parseFloat(y.toFixed(4))}`;
+                }
+            } else {
+                const eq3 = getCoefficientsLinear(i3);
+                const a1=eq1.x, b1=eq1.y, c1=eq1.z, d1=-eq1.c;
+                const a2=eq2.x, b2=eq2.y, c2=eq2.z, d2=-eq2.c;
+                const a3=eq3.x, b3=eq3.y, c3=eq3.z, d3=-eq3.c;
+
+                const D = a1*(b2*c3 - b3*c2) - b1*(a2*c3 - a3*c2) + c1*(a2*b3 - a3*b2);
+                if (Math.abs(D) < 1e-9) resDiv.innerText = "No unique solution";
+                else {
+                    const Dx = d1*(b2*c3 - b3*c2) - b1*(d2*c3 - d3*c2) + c1*(d2*b3 - d3*b2);
+                    const Dy = a1*(d2*c3 - d3*c2) - d1*(a2*c3 - a3*c2) + c1*(a2*d3 - a3*d2);
+                    const Dz = a1*(b2*d3 - b3*d2) - b1*(a2*d3 - a3*d2) + d1*(a2*b3 - a3*b2);
+                    resDiv.innerText = `x=${parseFloat((Dx/D).toFixed(4))}, y=${parseFloat((Dy/D).toFixed(4))}, z=${parseFloat((Dz/D).toFixed(4))}`;
+                }
+            }
+        } catch (e) {
+            resDiv.classList.add('error');
+            resDiv.innerText = e.message;
+            logDev(`Error: ${e.message}`);
+        }
+    }
+
+    window.addEventListener('mousemove', e => {
+        if(document.body.classList.contains('no-effects')) return;
+        document.querySelectorAll('.reveal-btn, .memory-item').forEach(b => {
+            const r=b.getBoundingClientRect(); b.style.setProperty('--x',(e.clientX-r.left)+'px'); b.style.setProperty('--y',(e.clientY-r.top)+'px');
+        });
+    });
+
+    // --- VARIABLE SELECTION LOGIC ---
+    function setupEqualButtons() {
+        const btns = [document.getElementById('btn-equal-basic'), document.getElementById('btn-equal-sci')];
+        btns.forEach(btn => {
+            if(!btn) return;
+            
+            let startY = 0;
+            let startTime = 0;
+            let longPressTimer = null;
+            let isActionTriggered = false;
+
+            const handleStart = (y) => {
+                startY = y;
+                startTime = Date.now();
+                isActionTriggered = false;
+                longPressTimer = setTimeout(() => {
+                    openVarModal('set'); // Long Press -> Set Algebra
+                    isActionTriggered = true;
+                    if(navigator.vibrate) navigator.vibrate(50);
+                }, 600);
+            };
+
+            const handleMove = (y) => {
+                if (isActionTriggered) return;
+                if ((y - startY) > 40) { // Swipe Down -> Call Algebra
+                    clearTimeout(longPressTimer);
+                    openVarModal('insert');
+                    isActionTriggered = true;
+                    if(navigator.vibrate) navigator.vibrate(30);
+                }
+            };
+
+            const handleEnd = (e) => {
+                clearTimeout(longPressTimer);
+                if (!isActionTriggered) {
+                    calculate(); // Tap -> Calculate
+                }
+                if(e.cancelable && isActionTriggered) e.preventDefault();
+            };
+
+            btn.addEventListener('touchstart', e => handleStart(e.touches[0].clientY), {passive: false});
+            btn.addEventListener('touchmove', e => handleMove(e.touches[0].clientY), {passive: true});
+            btn.addEventListener('touchend', handleEnd);
+            btn.addEventListener('mousedown', e => handleStart(e.clientY));
+            btn.addEventListener('mousemove', e => { if(e.buttons===1) handleMove(e.clientY); });
+            btn.addEventListener('mouseup', handleEnd);
+            btn.addEventListener('mouseleave', () => clearTimeout(longPressTimer));
+        });
+    }
+
+    function openVarModal(mode = 'insert') {
+        const modal = document.getElementById('var-modal');
+        const grid = document.getElementById('var-grid');
+        const header = document.querySelector('.var-header span');
+        
+        header.innerText = mode === 'set' ? 'Define Algebra Variable' : 'Insert Variable';
+        grid.innerHTML = '';
+        
+        const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
+        chars.forEach(char => {
+            const btn = document.createElement('button');
+            btn.className = 'reveal-btn keypad-btn var-btn';
+            btn.innerHTML = `<span>${char}</span>`;
+            if(userVariables[char] !== undefined) btn.style.borderColor = 'var(--accent-color)';
+            
+            btn.onclick = () => {
+                if(mode === 'insert') {
+                    appendNum(char);
+                    closeVarModal();
+                } else {
+                    selectVar(char);
+                }
+            };
+            grid.appendChild(btn);
+        });
+        
+        modal.style.display = 'flex';
+        document.getElementById('var-editor').style.visibility = 'hidden';
+    }
+
+    function closeVarModal() {
+        document.getElementById('var-modal').style.display = 'none';
+    }
+
+    let currentVarChar = '';
+    function selectVar(char) {
+        currentVarChar = char;
+        document.getElementById('var-selected-label').innerText = char;
+        document.getElementById('var-value-input').value = userVariables[char] !== undefined ? userVariables[char] : '';
+        document.getElementById('var-editor').style.visibility = 'visible';
+        document.getElementById('var-value-input').focus();
+    }
+
+    function saveVariable() {
+        const val = parseFloat(document.getElementById('var-value-input').value);
+        if(!isNaN(val)) {
+            userVariables[currentVarChar] = val;
+            logAction(`Defined variable ${currentVarChar} = ${val}`);
+            saveData();
+            closeVarModal();
+        } else {
+            alert("Please enter a valid number");
+        }
+    }
+
+    document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            if(this.id === 'menu-toggle') return;
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+        });
+    });
+
+    // --- SUPER MODE ---
+    function openSuperMode() { document.getElementById('super-modal').style.display = 'flex'; }
+    function closeSuperMode() { document.getElementById('super-modal').style.display = 'none'; }
+
+    // --- TABBED VIEW FEATURE ---
+    let tabCount = 0;
+    let activeTabId = null;
+
+    function toggleTabMode() {
+        const active = document.getElementById('tabview-toggle').checked;
+        const sys = document.getElementById('tab-system');
+        const app = document.getElementById('app');
+        
+        if (active) {
+            app.style.display = 'none';
+            sys.style.display = 'flex';
+            if (tabCount === 0) {
+                addNewTab();
+                addNewTab();
+            }
+        } else {
+            sys.style.display = 'none';
+            app.style.display = 'flex';
+        }
+    }
+
+    function exitTabMode() {
+        document.getElementById('tabview-toggle').checked = false;
+        toggleTabMode();
+    }
+
+    function addNewTab() {
+        tabCount++;
+        const tabId = 'tab-' + tabCount;
+        
+        const btn = document.createElement('button');
+        btn.className = 'tab-btn';
+        btn.id = 'btn-' + tabId;
+        btn.innerHTML = `<span>Calc ${tabCount}</span> <i class="fas fa-times tab-close" onclick="closeTab('${tabId}', event)"></i>`;
+        btn.onclick = () => switchTab(tabId);
+        
+        // Drag and Drop for Tabs
+        btn.draggable = true;
+        btn.addEventListener('dragstart', handleTabDragStart);
+        btn.addEventListener('dragover', handleTabDragOver);
+        btn.addEventListener('drop', handleTabDrop);
+        btn.addEventListener('dragend', handleTabDragEnd);
+        
+        document.getElementById('tabs-container').appendChild(btn);
+        
+        const iframe = document.createElement('iframe');
+        iframe.className = 'tab-iframe';
+        iframe.id = 'frame-' + tabId;
+        iframe.src = window.location.href; 
+        iframe.style.display = 'none';
+        document.getElementById('tab-content-area').appendChild(iframe);
+        
+        switchTab(tabId);
+    }
+
+    function switchTab(id) {
+        activeTabId = id;
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-iframe').forEach(f => f.style.display = 'none');
+        document.getElementById('btn-' + id).classList.add('active');
+        document.getElementById('frame-' + id).style.display = 'block';
+    }
+
+    function closeTab(id, e) {
+        e.stopPropagation();
+        const btn = document.getElementById('btn-' + id);
+        const frame = document.getElementById('frame-' + id);
+        if(btn) btn.remove();
+        if(frame) frame.remove();
+        
+        if (activeTabId === id) {
+            const remaining = document.querySelectorAll('.tab-btn');
+            if (remaining.length > 0) {
+                const nextId = remaining[remaining.length - 1].id.replace('btn-', '');
+                switchTab(nextId);
+            } else {
+                addNewTab();
+            }
+        }
+    }
+
+    // --- TAB DRAG & DROP ---
+    let dragTabEl = null;
+
+    function handleTabDragStart(e) {
+        dragTabEl = this;
+        e.dataTransfer.effectAllowed = 'move';
+        this.style.opacity = '0.4';
+    }
+
+    function handleTabDragOver(e) {
+        if (e.preventDefault) e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        return false;
+    }
+
+    function handleTabDrop(e) {
+        if (e.stopPropagation) e.stopPropagation();
+        if (dragTabEl !== this) {
+            const container = document.getElementById('tabs-container');
+            const children = Array.from(container.children);
+            const srcIdx = children.indexOf(dragTabEl);
+            const targetIdx = children.indexOf(this);
+            
+            if (srcIdx < targetIdx) this.after(dragTabEl);
+            else this.before(dragTabEl);
+        }
+        return false;
+    }
+
+    function handleTabDragEnd(e) {
+        this.style.opacity = '1';
+        dragTabEl = null;
+    }
+
+    function sendFeedback() {
+        const text = document.getElementById('feedback-input').value;
+        if(!text.trim()) { alert("Please enter some feedback."); return; }
+        const subject = "Metro Calculator Feedback";
+        const body = encodeURIComponent(text);
+        window.location.href = `mailto:klaychan.hk@gmail.com?subject=${encodeURIComponent(subject)}&body=${body}`;
+    }
+
+    updateConverterUI();
+</script>
+<style>
+    /* Variable Modal Styles */
+    #var-modal { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 2000; flex-direction: column; align-items: center; justify-content: center; backdrop-filter: blur(5px); }
+    #var-modal .keypad-btn { opacity: 1; }
+    .var-container { background: var(--bg-color); width: 800px; max-width: 95%; height: 80%; display: flex; flex-direction: column; border: 1px solid #444; box-shadow: 0 0 50px rgba(0,0,0,0.8); padding: 30px; }
+    .var-header { font-size: 1.5rem; margin-bottom: 20px; color: white; font-weight: 300; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid #333; padding-bottom: 15px; }
+    .var-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); gap: 10px; overflow-y: auto; flex: 1; padding: 10px; }
+    .var-btn { height: 60px; font-size: 1.4rem; font-weight: 300; border-radius: 0; border: 1px solid transparent; }
+    .var-btn:hover { border-color: #666; }
+    .var-editor { height: 80px; border-top: 1px solid #333; display: flex; align-items: center; gap: 20px; padding-top: 20px; margin-top: 10px; }
+    #var-selected-label { font-size: 2.5rem; color: var(--accent-color); width: 60px; text-align: center; font-weight: 300; }
+    #var-value-input { font-size: 1.5rem; flex: 1; border-bottom: 2px solid var(--accent-color); background: transparent; color: white; padding: 5px; }
+</style>
+</body>
+</html>

@@ -1,0 +1,1597 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Metro Timer Pro</title>
+<style>
+    :root {
+        --bg-color: #111;
+        --text-color: #ffffff;
+        --accent-color: #0078d7; /* Metro Blue */
+        --glow-color: rgba(0, 120, 215, 0.8);
+        --border-color: #333;
+        --border-glow: rgba(255, 255, 255, 0.6);
+        --surface-glow: rgba(255, 255, 255, 0.15);
+        --glow-radius: 110px;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        padding: 0;
+        background-color: var(--bg-color);
+        color: var(--text-color);
+        font-family: 'Segoe UI Light', 'Segoe UI', sans-serif;
+        display: flex;
+        flex-direction: column;
+        height: 100vh;
+        overflow: hidden;
+        user-select: none;
+    }
+
+    /* Metro Reveal Button Styles */
+    .metro-btn {
+        position: relative;
+        background: radial-gradient(circle at var(--x) var(--y), var(--border-glow) 0%, transparent var(--glow-radius)), var(--border-color);
+        border: none;
+        color: white;
+        padding: 12px 30px;
+        font-size: 1rem;
+        cursor: pointer;
+        overflow: hidden;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin: 5px;
+        border-radius: 0; /* No rounded corners */
+        display: inline-flex;
+        justify-content: center;
+        align-items: center;
+    }
+
+    /* The Reveal Effect */
+    .metro-btn::before {
+        content: '';
+        position: absolute;
+        inset: 1px;
+        background: var(--bg-color);
+        z-index: 1;
+        transition: background 0.2s;
+    }
+
+    .metro-btn span {
+        position: relative;
+        z-index: 2;
+    }
+
+    .metro-btn:hover::before {
+        background: radial-gradient(circle at var(--x) var(--y), var(--surface-glow) 0%, transparent var(--glow-radius)), var(--bg-color);
+    }
+
+    .metro-btn.active {
+        background-color: var(--accent-color);
+        box-shadow: none;
+        font-weight: bold;
+    }
+    
+    .metro-btn.active::before {
+        background: var(--accent-color);
+    }
+
+    /* Layout */
+    .top-bar {
+        display: flex;
+        justify-content: center;
+        padding: 20px;
+        z-index: 10;
+    }
+
+    .main-display {
+        flex: 1;
+        display: flex;
+        flex-direction: row;
+        justify-content: center;
+        align-items: center;
+        position: relative;
+        gap: 60px;
+    }
+
+    .canvas-container {
+        position: relative;
+        width: 500px;
+        height: 500px;
+        flex-shrink: 0;
+    }
+
+    canvas {
+        position: absolute;
+        top: 0;
+        left: 0;
+        cursor: pointer;
+    }
+
+    .right-panel {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: flex-start;
+        min-width: 300px;
+    }
+
+    .time-display {
+        font-size: 6rem;
+        font-weight: 300;
+        margin-bottom: 30px;
+        text-shadow: 0 0 10px var(--glow-color);
+        transition: text-shadow 0.3s;
+        cursor: default;
+    }
+
+    .time-display:hover {
+        text-shadow: 0 0 30px var(--accent-color), 0 0 50px var(--accent-color);
+    }
+
+    .ms-display {
+        font-size: 2.5rem;
+        color: #666;
+        margin-top: -25px;
+        margin-bottom: 20px;
+        font-weight: 300;
+        min-height: 3rem;
+    }
+
+    .keyboard-input {
+        font-size: 6rem;
+        background: transparent;
+        border: none;
+        border-bottom: 2px solid var(--accent-color);
+        color: white;
+        text-align: center;
+        width: 80%;
+        outline: none;
+        font-family: 'Segoe UI Light', sans-serif;
+        display: none;
+        position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+        text-shadow: 0 0 15px var(--glow-color);
+        border-radius: 0;
+    }
+
+    .controls-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 15px;
+        width: 100%;
+    }
+    
+    .controls-grid .metro-btn {
+        margin: 0;
+        width: 100%;
+        text-align: center;
+    }
+
+    /* Preset Bar */
+    .left-panel-wrapper {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+    }
+
+    .preset-bar {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        z-index: 5;
+        width: 100%;
+        margin-top: 20px;
+    }
+
+    .preset-row {
+        width: 100%;
+        min-height: 60px;
+        border-radius: 0;
+        padding: 0 20px;
+        font-size: 0.9rem;
+        font-weight: bold;
+        transition: all 0.3s ease;
+        margin: 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        text-transform: none;
+    }
+
+    .preset-row.editing {
+        border-color: var(--accent-color);
+        box-shadow: none;
+        animation: none;
+        background: var(--accent-color);
+    }
+
+    .preset-info {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-start;
+        z-index: 3;
+    }
+    .preset-name { font-size: 1rem; }
+    .preset-time { font-size: 0.8rem; opacity: 0.7; }
+
+    .preset-actions { display: flex; gap: 5px; z-index: 3; }
+    .action-btn {
+        padding: 5px 10px;
+        font-size: 0.8rem;
+        text-transform: none;
+        letter-spacing: normal;
+        margin: 0;
+    }
+
+    /* Settings Page */
+    .settings-page {
+        flex: 1;
+        display: none;
+        width: 100%;
+        overflow: hidden;
+    }
+    .settings-box {
+        background: transparent;
+        border: none;
+        width: 100%;
+        height: 100%;
+        max-width: 800px;
+        padding: 40px;
+        padding-bottom: 80px;
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+        box-shadow: none;
+        justify-content: flex-start;
+        overflow-y: auto;
+        margin: 0 auto;
+    }
+    .settings-title { font-size: 3rem; font-weight: 300; margin-bottom: 30px; border-bottom: 1px solid #333; padding-bottom: 10px; width: 100%; }
+    .setting-row { display: flex; justify-content: space-between; align-items: center; }
+    .setting-label { font-size: 1rem; }
+    
+    /* Custom Color Input */
+    input[type="color"] {
+        -webkit-appearance: none; border: none; width: 30px; height: 30px; padding: 0; background: none; cursor: pointer;
+    }
+    input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+    input[type="color"]::-webkit-color-swatch { border: 1px solid #555; border-radius: 0; }
+
+    /* Switch */
+    .switch { position: relative; display: inline-block; width: 50px; height: 24px; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #333; transition: .4s; }
+    .slider:before { position: absolute; content: ""; height: 16px; width: 16px; left: 4px; bottom: 4px; background-color: white; transition: .4s; }
+    input:checked + .slider { background-color: var(--accent-color); }
+    input:checked + .slider:before { transform: translateX(26px); }
+
+    .counter-control { display: flex; align-items: center; gap: 5px; }
+    .small-btn { padding: 0; width: 40px; height: 40px; min-width: 40px; margin: 0; font-size: 1.2rem; }
+
+    /* Feedback Page */
+    .feedback-page {
+        flex: 1;
+        display: none;
+        justify-content: center;
+        width: 100%;
+    }
+    .feedback-box {
+        width: 100%;
+        height: 100%;
+        max-width: 800px;
+        padding: 40px;
+        display: flex;
+        flex-direction: column;
+        gap: 20px;
+    }
+    .feedback-textarea {
+        width: 100%;
+        height: 300px;
+        background: rgba(255,255,255,0.05);
+        border: 1px solid var(--border-color);
+        color: white;
+        padding: 20px;
+        font-family: 'Segoe UI', sans-serif;
+        font-size: 1.2rem;
+        resize: none;
+        outline: none;
+    }
+    .feedback-textarea:focus {
+        border-color: var(--accent-color);
+        box-shadow: 0 0 15px var(--glow-color);
+    }
+
+    /* --- NEW INPUT MODES --- */
+    
+    /* Scroll Picker (iPhone Style) */
+    .picker-container {
+        display: none;
+        flex-direction: row;
+        justify-content: center;
+        height: 300px;
+        width: 400px;
+        position: relative;
+        background: rgba(0,0,0,0.2);
+        border: 1px solid var(--border-color);
+        overflow: hidden;
+    }
+    .picker-header {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        display: flex;
+        justify-content: space-around;
+        padding: 10px 0;
+        font-size: 0.9rem;
+        color: #aaa;
+        z-index: 10;
+    }
+    .picker-col {
+        flex: 1;
+        overflow-y: scroll;
+        scroll-snap-type: y mandatory;
+        scrollbar-width: none; /* Firefox */
+        padding: 120px 0; /* (300px height - 60px item) / 2 */
+        scroll-behavior: auto; /* Important for instant jumps */
+    }
+    .picker-col::-webkit-scrollbar { display: none; }
+    .picker-item {
+        height: 60px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2rem;
+        scroll-snap-align: center;
+        color: #555;
+        transition: color 0.2s, transform 0.2s;
+    }
+    .picker-item.selected {
+        color: #fff;
+        text-shadow: 0 0 15px var(--glow-color), 0 0 30px var(--glow-color);
+        font-weight: bold;
+        transform: scale(1.2);
+    }
+
+    .picker-highlight {
+        position: absolute;
+        top: 50%; left: 0; right: 0;
+        height: 60px;
+        transform: translateY(-50%);
+        border-top: 1px solid var(--accent-color);
+        border-bottom: 1px solid var(--accent-color);
+        pointer-events: none;
+        background: rgba(255,255,255,0.05);
+    }
+
+    /* Slider Bar Control */
+    .slider-input-container {
+        display: none;
+        flex-direction: column;
+        gap: 15px;
+        width: 450px;
+        justify-content: center;
+    }
+    .slider-row {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        padding: 20px;
+        /* Glow Effect Base */
+        position: relative;
+        background: radial-gradient(circle at var(--x) var(--y), var(--border-glow) 0%, transparent var(--glow-radius)), var(--border-color);
+    }
+    .slider-row::before { content: ''; position: absolute; inset: 1px; background: var(--bg-color); z-index: 1; }
+    .slider-row label, .slider-row input, .slider-row span { position: relative; z-index: 2; }
+    
+    /* Filling Bar Style */
+    .slider-row input[type=range] { 
+        flex: 1; -webkit-appearance: none; 
+        background: #333; height: 30px; outline: none; border: 1px solid #555;
+        cursor: pointer;
+    }
+    /* Hide the thumb but keep it interactive */
+    .slider-row input[type=range]::-webkit-slider-thumb {
+        -webkit-appearance: none; width: 0; height: 30px; 
+        background: transparent; border: none;
+    }
+    /* Firefox thumb */
+    .slider-row input[type=range]::-moz-range-thumb { width: 0; border: none; background: transparent; }
+
+    /* Custom Width Control UI */
+    .width-control-container { display: flex; gap: 20px; margin-top: 15px; justify-content: center; }
+    .width-control-group { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+    .setting-label-small { font-size: 0.8rem; color: #aaa; }
+    .width-adjuster {
+        display: flex; flex-direction: column; align-items: center;
+        background: rgba(255,255,255,0.05); border: 1px solid #333;
+        width: 60px;
+    }
+    .width-value {
+        font-size: 1.1rem; font-weight: bold; padding: 5px 0;
+        width: 100%; text-align: center; cursor: default;
+    }
+    .arrow-btn {
+        width: 100%; height: 25px; padding: 0; margin: 0;
+        font-size: 0.7rem; min-width: 0;
+        display: flex; justify-content: center; align-items: center;
+    }
+
+    /* Overtime / Time's Up Styles */
+    .time-display.overtime { color: #ff3333; text-shadow: 0 0 20px rgba(255, 0, 0, 0.6); }
+    
+    .times-up-message {
+        color: #ff3333; font-size: 2rem; font-weight: bold;
+        text-transform: uppercase; letter-spacing: 2px;
+        margin-bottom: 20px; display: none; text-align: center;
+        animation: flashRed 1s infinite;
+    }
+    @keyframes flashRed {
+        0%, 100% { opacity: 1; text-shadow: 0 0 10px rgba(255,0,0,0.5); }
+        50% { opacity: 0.3; text-shadow: none; }
+    }
+
+    .overtime-controls { display: none; gap: 10px; width: 100%; flex-direction: column; }
+    
+    /* Custom Dropdown */
+    .metro-dropdown-group { display: flex; position: relative; width: 100%; }
+    .metro-dropdown-group .metro-btn { margin: 0; }
+    .metro-dropdown-group .main-btn { flex: 1; }
+    .metro-dropdown-group .arrow-btn { width: 50px; }
+    
+    .metro-dropdown-list {
+        display: none; position: absolute; top: 100%; right: 0; left: 0;
+        background: #222; border: 1px solid #444; z-index: 100;
+        flex-direction: column;
+    }
+    .metro-dropdown-list.show { display: flex; }
+    .metro-dropdown-item {
+        padding: 15px 20px; cursor: pointer; color: white; transition: background 0.2s;
+        font-size: 1rem; text-align: left;
+    }
+    .metro-dropdown-item:hover { background: var(--accent-color); }
+
+    @keyframes pulse {
+        0% { box-shadow: 0 0 0 0 rgba(0, 120, 215, 0.7); }
+        70% { box-shadow: 0 0 0 10px rgba(0, 120, 215, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(0, 120, 215, 0); }
+    }
+</style>
+</head>
+<body>
+
+    <div class="top-bar">
+        <button class="metro-btn active" id="btn-mode-timer" onclick="setMode('timer')"><span>Timer</span></button>
+        <button class="metro-btn" id="btn-mode-stopwatch" onclick="setMode('stopwatch')"><span>Stopwatch</span></button>
+        <button class="metro-btn" id="btn-mode-settings" onclick="setMode('settings')"><span>Settings</span></button>
+        <button class="metro-btn" id="btn-mode-feedback" onclick="setMode('feedback')"><span>Feedback</span></button>
+        <button class="metro-btn" style="position: absolute; right: 20px; top: 20px;" onclick="window.location.href='../index.html'"><span><i class="fas fa-arrow-left"></i> Back</span></button>
+        <div style="position: absolute; right: 20px; top: 75px; font-size: 0.8rem; opacity: 0.6; letter-spacing: 1px; text-align: right;">v 3.0 -- big update</div>
+    </div>
+
+    <div class="main-display" id="display-area">
+        <!-- Left: Circles -->
+        <div class="left-panel-wrapper">
+            <div class="canvas-container" id="visual-container">
+                <canvas id="timer-canvas" width="500" height="500"></canvas>
+                <input type="text" class="keyboard-input" id="time-input" value="00:00:00" placeholder="HH:MM:SS">
+            </div>
+
+            <!-- Scroll Picker Input -->
+            <div class="picker-container" id="picker-input">
+                <div class="picker-header">
+                    <span style="flex:1; text-align:center;">Hours</span>
+                    <span style="flex:1; text-align:center;">Mins</span>
+                    <span style="flex:1; text-align:center;">Secs</span>
+                </div>
+                <div class="picker-highlight"></div>
+                <div class="picker-col" id="picker-h" onscroll="handlePickerScroll()"></div>
+                <div class="picker-col" id="picker-m" onscroll="handlePickerScroll()"></div>
+                <div class="picker-col" id="picker-s" onscroll="handlePickerScroll()"></div>
+            </div>
+
+            <!-- Slider Bar Input -->
+            <div class="slider-input-container" id="slider-input">
+                <div class="slider-row glow-effect"><label style="width:30px">Hr</label><input type="range" id="slider-h" min="0" max="99" oninput="handleSliderInput()"><span id="val-h" style="width:30px; text-align:right;">0</span></div>
+                <div class="slider-row glow-effect"><label style="width:30px">Min</label><input type="range" id="slider-m" min="0" max="59" oninput="handleSliderInput()"><span id="val-m" style="width:30px; text-align:right;">0</span></div>
+                <div class="slider-row glow-effect"><label style="width:30px">Sec</label><input type="range" id="slider-s" min="0" max="59" oninput="handleSliderInput()"><span id="val-s" style="width:30px; text-align:right;">0</span></div>
+            </div>
+        </div>
+        
+        <!-- Right: Settings/Controls -->
+        <div class="right-panel">
+            <div class="time-display" id="time-text">00:00:00</div>
+            <div class="ms-display" id="ms-text"></div>
+            <div class="times-up-message" id="times-up-msg">Time's Up!</div>
+            
+            <div class="controls-grid" id="normal-controls">
+                <button class="metro-btn" id="btn-start" onclick="toggleTimer()"><span>Start</span></button>
+                <button class="metro-btn" id="btn-reset" onclick="resetTimer()"><span>Reset</span></button>
+                <button class="metro-btn" id="btn-input-mode" onclick="cycleInputMode()" style="grid-column: span 2;"><span>Input: Visual</span></button>
+            </div>
+
+            <div class="overtime-controls" id="overtime-controls">
+                <button class="metro-btn" onclick="stopOvertime()"><span>Stop</span></button>
+                <div class="metro-dropdown-group">
+                    <button class="metro-btn main-btn" onclick="extendTimer()"><span>Extend <span id="extend-val-display">5m</span></span></button>
+                    <button class="metro-btn arrow-btn" onclick="toggleExtendDropdown(event)"><span>&#9660;</span></button>
+                    <div class="metro-dropdown-list" id="extend-dropdown-list">
+                        <div class="metro-dropdown-item" onclick="setExtendDuration(1)">1 Minute</div>
+                        <div class="metro-dropdown-item" onclick="setExtendDuration(5)">5 Minutes</div>
+                        <div class="metro-dropdown-item" onclick="setExtendDuration(10)">10 Minutes</div>
+                    </div>
+                </div>
+            </div>
+            <div class="preset-bar" id="preset-bar">
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Page -->
+    <div class="settings-page" id="settings-page">
+        <div class="settings-box">
+            <div class="settings-title">Settings</div>
+            
+            <div class="setting-row" style="flex-direction: column; align-items: center; border-bottom: 1px solid #333; padding-bottom: 20px; margin-bottom: 20px;">
+                <span class="setting-label" style="margin-bottom: 15px;">Ring Widths (Drag rings to resize)</span>
+                <div style="position: relative; width: 300px; height: 300px; background: rgba(255,255,255,0.02); border-radius: 50%;">
+                    <canvas id="width-canvas" width="300" height="300" style="cursor: pointer; border-radius: 50%;"></canvas>
+                </div>
+                <div class="width-control-container">
+                    <div class="width-control-group">
+                        <span class="setting-label-small">Hours</span>
+                        <div class="width-adjuster"><button class="metro-btn arrow-btn" onclick="adjustRingWidth('h', 1)"><span>&#9650;</span></button><span id="width-val-h" class="width-value">40</span><button class="metro-btn arrow-btn" onclick="adjustRingWidth('h', -1)"><span>&#9660;</span></button></div>
+                    </div>
+                    <div class="width-control-group">
+                        <span class="setting-label-small">Mins</span>
+                        <div class="width-adjuster"><button class="metro-btn arrow-btn" onclick="adjustRingWidth('m', 1)"><span>&#9650;</span></button><span id="width-val-m" class="width-value">40</span><button class="metro-btn arrow-btn" onclick="adjustRingWidth('m', -1)"><span>&#9660;</span></button></div>
+                    </div>
+                    <div class="width-control-group">
+                        <span class="setting-label-small">Secs</span>
+                        <div class="width-adjuster"><button class="metro-btn arrow-btn" onclick="adjustRingWidth('s', 1)"><span>&#9650;</span></button><span id="width-val-s" class="width-value">40</span><button class="metro-btn arrow-btn" onclick="adjustRingWidth('s', -1)"><span>&#9660;</span></button></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="setting-row">
+                <span class="setting-label">Hours Ring</span>
+                <input type="color" id="col-ring-h" value="#0078d7" onchange="updateSettings()">
+            </div>
+            <div class="setting-row">
+                <span class="setting-label">Minutes Ring</span>
+                <input type="color" id="col-ring-m" value="#0078d7" onchange="updateSettings()">
+            </div>
+            <div class="setting-row">
+                <span class="setting-label">Seconds Ring</span>
+                <input type="color" id="col-ring-s" value="#0078d7" onchange="updateSettings()">
+            </div>
+            
+            <div class="setting-row">
+                <span class="setting-label">Button Color</span>
+                <input type="color" id="col-btn-accent" value="#0078d7" onchange="updateSettings()">
+            </div>
+            <div class="setting-row">
+                <span class="setting-label">Cursor Glow Color</span>
+                <input type="color" id="col-glow" value="#0078d7" onchange="updateSettings()">
+            </div>
+
+            <div class="setting-row" style="margin-top: 10px; border-top: 1px solid #333; padding-top: 10px;">
+                <span class="setting-label">Background Gradient</span>
+                <label class="switch"><input type="checkbox" id="bg-gradient-toggle" onchange="updateSettings()"><span class="slider"></span></label>
+            </div>
+            
+            <div id="bg-solid-controls" class="setting-row">
+                <span class="setting-label">Background Color</span>
+                <input type="color" id="col-bg-solid" value="#111111" onchange="updateSettings()">
+            </div>
+            
+            <div id="bg-gradient-controls" style="display:none; flex-direction: column; gap: 10px;">
+                <div class="setting-row"><span class="setting-label">Color 1</span> <input type="color" id="col-bg-1" value="#111111" onchange="updateSettings()"></div>
+                <div class="setting-row"><span class="setting-label">Color 2</span> <input type="color" id="col-bg-2" value="#222222" onchange="updateSettings()"></div>
+                <div class="setting-row"><span class="setting-label">Color 3</span> <input type="color" id="col-bg-3" value="#333333" onchange="updateSettings()"></div>
+            </div>
+
+            <div class="setting-row" style="margin-top: 20px; border-top: 1px solid #333; padding-top: 10px;">
+                <span class="setting-label">Alarm Sound</span>
+                <select id="alarm-select" onchange="updateAlarmSettings()" style="background: #222; color: white; border: 1px solid #444; padding: 5px; width: 150px;">
+                    <option value="default">Default (Beep)</option>
+                    <option value="iphone">iPhone Radar</option>
+                    <option value="samsung">Samsung Homecoming</option>
+                    <option value="custom">Custom (Upload)</option>
+                </select>
+            </div>
+            <div class="setting-row" id="alarm-upload-row" style="display:none;">
+                <span class="setting-label">Upload MP3</span>
+                <input type="file" id="alarm-file-input" accept="audio/*" onchange="handleAlarmUpload()" style="color: white; font-size: 0.8rem; width: 200px;">
+            </div>
+            <div class="setting-row">
+                <button class="metro-btn" onclick="testAlarm()"><span>Test</span></button>
+                <button class="metro-btn" onclick="stopAlarm()"><span>Stop</span></button>
+            </div>
+
+            <div class="setting-row" style="margin-top: 20px; border-top: 1px solid #333; padding-top: 10px;">
+                <span class="setting-label">Timer MS Digits</span>
+                <div class="counter-control">
+                    <button class="metro-btn small-btn" onclick="adjustTimerMsDigits(-1)"><span>&#9664;</span></button>
+                    <span id="timer-ms-digits-val" style="font-size: 1.2rem; width: 30px; text-align: center;">0</span>
+                    <button class="metro-btn small-btn" onclick="adjustTimerMsDigits(1)"><span>&#9654;</span></button>
+                </div>
+            </div>
+            <div class="setting-row">
+                <span class="setting-label">Stopwatch MS Digits</span>
+                <div class="counter-control">
+                    <button class="metro-btn small-btn" onclick="adjustStopwatchMsDigits(-1)"><span>&#9664;</span></button>
+                    <span id="sw-ms-digits-val" style="font-size: 1.2rem; width: 30px; text-align: center;">2</span>
+                    <button class="metro-btn small-btn" onclick="adjustStopwatchMsDigits(1)"><span>&#9654;</span></button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Page -->
+    <div class="feedback-page" id="feedback-page">
+        <div class="feedback-box">
+            <div class="settings-title">Feedback</div>
+            <textarea class="feedback-textarea" id="feedback-text" placeholder="Type your feedback here..."></textarea>
+            <button class="metro-btn" onclick="sendFeedback()" style="width: 200px; align-self: flex-end;"><span>Send</span></button>
+        </div>
+    </div>
+
+<script>
+    // --- CONFIG ---
+    const canvas = document.getElementById('timer-canvas');
+    const ctx = canvas.getContext('2d');
+    const widthCanvas = document.getElementById('width-canvas');
+    const widthCtx = widthCanvas.getContext('2d');
+    const timeText = document.getElementById('time-text');
+    const msText = document.getElementById('ms-text');
+    const timeInput = document.getElementById('time-input');
+    const visualContainer = document.getElementById('visual-container');
+    const btnStart = document.getElementById('btn-start');
+
+    let mode = 'timer'; // 'timer' or 'stopwatch'
+    let isRunning = false;
+    let inputMode = 'visual'; // visual, keyboard, picker, slider
+    
+    // Presets
+    let presets = [null, null, null];
+    let editingPresetIndex = null;
+    let activePresetIndex = null;
+    
+    // Time variables (in seconds)
+    let totalTime = 0; 
+    let remainingTime = 0;
+    let stopwatchTime = 0;
+    let lastTimestamp = 0;
+    let animationFrameId;
+
+    // Display Settings
+    let timerMsPrecision = 0;
+    let stopwatchMsPrecision = 2;
+
+    // Alarm
+    let alarmType = 'default';
+    let customAlarmURL = null;
+    let alarmAudio = null;
+    let alarmInterval = null;
+    let isAlarmPlaying = false;
+    let isOvertime = false;
+    let extendDuration = 5; // minutes
+
+    // Visual Config
+    const centerX = 250;
+    const centerY = 250;
+    const radiusHours = 220;
+    const radiusMinutes = 160;
+    const radiusSeconds = 100;
+    let widthHours = 40;
+    let widthMinutes = 40;
+    let widthSeconds = 40;
+    let ringColorH = '#0078d7';
+    let ringColorM = '#0078d7';
+    let ringColorS = '#0078d7';
+    const trackColor = '#222';
+
+    // --- INITIALIZATION ---
+    window.addEventListener('load', () => {
+        draw();
+        setupRevealEffect();
+        initPicker();
+        initWidthControl();
+        renderPresets();
+
+        // Close dropdown when clicking outside
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('.metro-dropdown-group')) {
+                document.getElementById('extend-dropdown-list').classList.remove('show');
+            }
+        });
+    });
+
+    // --- MODES ---
+    function setMode(m) {
+        mode = m;
+        isRunning = false;
+        cancelAnimationFrame(animationFrameId);
+        stopAlarm();
+        editingPresetIndex = null;
+        
+        // Reset input mode to visual when switching main modes
+        inputMode = 'visual';
+        updateInputModeUI();
+        renderPresets();
+        
+        // Update UI Visibility
+        const isSettings = mode === 'settings';
+        const isFeedback = mode === 'feedback';
+        
+        document.getElementById('display-area').style.display = (isSettings || isFeedback) ? 'none' : 'flex';
+        document.getElementById('settings-page').style.display = isSettings ? 'flex' : 'none';
+        document.getElementById('feedback-page').style.display = isFeedback ? 'flex' : 'none';
+
+        document.getElementById('btn-mode-timer').classList.toggle('active', mode === 'timer');
+        document.getElementById('btn-mode-stopwatch').classList.toggle('active', mode === 'stopwatch');
+        document.getElementById('btn-mode-settings').classList.toggle('active', mode === 'settings');
+        document.getElementById('btn-mode-feedback').classList.toggle('active', mode === 'feedback');
+        
+        if (isSettings || isFeedback) return;
+
+        if (mode === 'timer') {
+            remainingTime = totalTime > 0 ? totalTime : 0;
+            btnStart.querySelector('span').innerText = "Start";
+            document.getElementById('preset-bar').style.display = 'flex';
+        } else {
+            stopwatchTime = 0;
+            isOvertime = false;
+            btnStart.querySelector('span').innerText = "Start";
+            msText.innerText = "00";
+            document.getElementById('preset-bar').style.display = 'none';
+        }
+        updateText();
+        draw();
+    }
+
+    function cycleInputMode() {
+        const modes = ['visual', 'keyboard', 'picker', 'slider'];
+        let idx = modes.indexOf(inputMode);
+        inputMode = modes[(idx + 1) % modes.length];
+        updateInputModeUI();
+    }
+
+    function updateInputModeUI() {
+        const btn = document.getElementById('btn-input-mode');
+        const visualCont = document.getElementById('visual-container');
+        const pickerCont = document.getElementById('picker-input');
+        const sliderCont = document.getElementById('slider-input');
+        
+        // Hide all first
+        visualCont.style.display = 'none';
+        pickerCont.style.display = 'none';
+        sliderCont.style.display = 'none';
+        canvas.style.display = 'none';
+        timeInput.style.display = 'none';
+        btn.classList.remove('active');
+
+        if (inputMode === 'visual') {
+            visualCont.style.display = 'block';
+            canvas.style.display = 'block';
+            btn.querySelector('span').innerText = "Input: Visual";
+            draw();
+        } else if (inputMode === 'keyboard') {
+            visualCont.style.display = 'block';
+            timeInput.style.display = 'block';
+            timeInput.value = formatTime(mode === 'timer' ? remainingTime : stopwatchTime);
+            timeInput.focus();
+            btn.querySelector('span').innerText = "Input: Keyboard";
+            btn.classList.add('active');
+        } else if (inputMode === 'picker') {
+            pickerCont.style.display = 'flex';
+            syncPicker();
+            btn.querySelector('span').innerText = "Input: Scroll";
+            btn.classList.add('active');
+        } else if (inputMode === 'slider') {
+            sliderCont.style.display = 'flex';
+            syncSlider();
+            btn.querySelector('span').innerText = "Input: Bar";
+            btn.classList.add('active');
+        }
+    }
+
+    function parseInputTime(str) {
+        const parts = str.split(':').map(x => parseFloat(x) || 0);
+        let s = 0;
+        if (parts.length === 3) s = parts[0] * 3600 + parts[1] * 60 + parts[2];
+        else if (parts.length === 2) s = parts[0] * 60 + parts[1];
+        else if (parts.length === 1) s = parts[0];
+        
+        if (mode === 'timer') {
+            totalTime = s;
+            remainingTime = s;
+            if (editingPresetIndex !== null && presets[editingPresetIndex]) {
+                presets[editingPresetIndex].time = totalTime;
+                renderPresets();
+            }
+        } else {
+            stopwatchTime = s;
+        }
+        updateText();
+    }
+
+    // --- TIMER LOGIC ---
+    function toggleTimer() {
+        if (isAlarmPlaying) {
+            stopAlarm();
+            return;
+        }
+        if (isRunning) {
+            isRunning = false;
+            btnStart.querySelector('span').innerText = "Start";
+            cancelAnimationFrame(animationFrameId);
+        } else {
+            if (mode === 'timer' && remainingTime <= 0) return;
+            if (editingPresetIndex !== null) {
+                editingPresetIndex = null;
+                renderPresets();
+            }
+            isRunning = true;
+            btnStart.querySelector('span').innerText = "Pause";
+            lastTimestamp = performance.now();
+            loop();
+        }
+    }
+
+    function resetTimer() {
+        stopAlarm();
+        isOvertime = false;
+        isRunning = false;
+        cancelAnimationFrame(animationFrameId);
+        btnStart.querySelector('span').innerText = "Start";
+        if (mode === 'timer') {
+            remainingTime = totalTime;
+        } else {
+            stopwatchTime = 0;
+        }
+        updateText();
+        draw();
+    }
+
+    function loop() {
+        if (!isRunning) return;
+        const now = performance.now();
+        const delta = (now - lastTimestamp) / 1000;
+        lastTimestamp = now;
+
+        if (mode === 'timer') {
+            remainingTime -= delta;
+            if (remainingTime <= 0 && !isOvertime) {
+                // Enter Overtime
+                isOvertime = true;
+                playAlarm();
+                updateText(); // Force update to show UI changes
+            }
+        } else {
+            stopwatchTime += delta;
+        }
+
+        updateText();
+        draw();
+        animationFrameId = requestAnimationFrame(loop);
+    }
+
+    function formatTime(s) {
+        s = Math.abs(s); // Handle negative time for overtime
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = Math.floor(s % 60);
+        return `${pad(h)}:${pad(m)}:${pad(sec)}`;
+    }
+    function pad(n, w=2) {
+        n = n + '';
+        while (n.length < w) n = '0' + n;
+        return n;
+    }
+
+    function updateText() {
+        const t = mode === 'timer' ? remainingTime : stopwatchTime;
+        timeText.innerText = formatTime(t);
+        timeText.style.visibility = 'visible';
+        msText.style.visibility = 'visible';
+
+        // Overtime UI Logic
+        if (mode === 'timer' && isOvertime) {
+            timeText.classList.add('overtime');
+            document.getElementById('times-up-msg').style.display = 'block';
+            document.getElementById('normal-controls').style.display = 'none';
+            document.getElementById('overtime-controls').style.display = 'flex';
+        } else {
+            timeText.classList.remove('overtime');
+            document.getElementById('times-up-msg').style.display = 'none';
+            document.getElementById('normal-controls').style.display = 'grid';
+            document.getElementById('overtime-controls').style.display = 'none';
+        }
+
+        const precision = mode === 'timer' ? timerMsPrecision : stopwatchMsPrecision;
+
+        if (precision > 0) {
+            const msVal = Math.floor((t % 1) * Math.pow(10, precision));
+            msText.innerText = pad(msVal, precision);
+        } else {
+            msText.innerText = "";
+        }
+    }
+
+    // --- OVERTIME CONTROLS ---
+    function stopOvertime() {
+        stopAlarm();
+        isOvertime = false;
+        isRunning = false;
+        remainingTime = totalTime; // Reset to original time
+        btnStart.querySelector('span').innerText = "Start";
+        updateText();
+        draw();
+    }
+
+    function extendTimer() {
+        stopAlarm();
+        isOvertime = false;
+        remainingTime = extendDuration * 60;
+        totalTime = remainingTime; // Treat extension as new total for ring progress? Or just add? Let's set as new.
+        isRunning = true;
+        updateText();
+    }
+
+    function toggleExtendDropdown(e) {
+        e.stopPropagation();
+        document.getElementById('extend-dropdown-list').classList.toggle('show');
+    }
+
+    function setExtendDuration(mins) {
+        extendDuration = mins;
+        document.getElementById('extend-val-display').innerText = mins + 'm';
+        document.getElementById('extend-dropdown-list').classList.remove('show');
+    }
+
+    // --- NEW INPUT LOGIC ---
+    
+    // Picker
+    function initPicker() {
+        const createItems = (id, max) => {
+            const col = document.getElementById(id);
+            // Create 3 sets for infinite scrolling: [Buffer Top] [Main Middle] [Buffer Bottom]
+            for(let set=0; set<3; set++) {
+                for(let i=0; i<=max; i++) {
+                    const div = document.createElement('div');
+                    div.className = 'picker-item';
+                    div.innerText = pad(i);
+                    col.appendChild(div);
+                }
+            }
+        };
+        createItems('picker-h', 99);
+        createItems('picker-m', 59);
+        createItems('picker-s', 59);
+    }
+
+    function syncPicker() {
+        const t = mode === 'timer' ? remainingTime : stopwatchTime;
+        const h = Math.floor(t / 3600);
+        const m = Math.floor((t % 3600) / 60);
+        const s = Math.floor(t % 60);
+        
+        // Scroll to the middle set
+        const scrollToMiddle = (id, val, max) => {
+            const itemH = 60;
+            const setH = (max + 1) * itemH;
+            document.getElementById(id).scrollTop = setH + (val * itemH);
+        };
+
+        scrollToMiddle('picker-h', h, 99);
+        scrollToMiddle('picker-m', m, 59);
+        scrollToMiddle('picker-s', s, 59);
+        highlightPickerItems();
+    }
+
+    function handlePickerScroll() {
+        const processCol = (id, max) => {
+            const el = document.getElementById(id);
+            const itemH = 60;
+            const setH = (max + 1) * itemH;
+            
+            // Infinite Scroll Logic: Jump if near edges
+            if (el.scrollTop < itemH) {
+                el.scrollTop += setH;
+            } else if (el.scrollTop > (setH * 2) - itemH) {
+                el.scrollTop -= setH;
+            }
+            
+            // Calculate value based on modulo
+            return Math.round(el.scrollTop / itemH) % (max + 1);
+        };
+
+        const h = processCol('picker-h', 99);
+        const m = processCol('picker-m', 59);
+        const s = processCol('picker-s', 59);
+        
+        updateTimeFromInput(h, m, s);
+        highlightPickerItems();
+    }
+
+    function highlightPickerItems() {
+        ['picker-h', 'picker-m', 'picker-s'].forEach(id => {
+            const col = document.getElementById(id);
+            const idx = Math.round(col.scrollTop / 60);
+            Array.from(col.children).forEach((child, i) => {
+                child.classList.toggle('selected', i === idx);
+            });
+        });
+    }
+
+    // Slider
+    function syncSlider() {
+        const t = mode === 'timer' ? remainingTime : stopwatchTime;
+        const h = Math.floor(t / 3600);
+        const m = Math.floor((t % 3600) / 60);
+        const s = Math.floor(t % 60);
+        
+        const sh = document.getElementById('slider-h');
+        const sm = document.getElementById('slider-m');
+        const ss = document.getElementById('slider-s');
+        
+        sh.value = h; sm.value = m; ss.value = s;
+        
+        document.getElementById('val-h').innerText = h;
+        document.getElementById('val-m').innerText = m;
+        document.getElementById('val-s').innerText = s;
+        
+        updateSliderFill(sh);
+        updateSliderFill(sm);
+        updateSliderFill(ss);
+    }
+
+    function handleSliderInput() {
+        const sh = document.getElementById('slider-h');
+        const sm = document.getElementById('slider-m');
+        const ss = document.getElementById('slider-s');
+        
+        const h = parseInt(sh.value);
+        const m = parseInt(sm.value);
+        const s = parseInt(ss.value);
+        
+        document.getElementById('val-h').innerText = h;
+        document.getElementById('val-m').innerText = m;
+        document.getElementById('val-s').innerText = s;
+        
+        updateSliderFill(sh);
+        updateSliderFill(sm);
+        updateSliderFill(ss);
+        
+        updateTimeFromInput(h, m, s);
+    }
+
+    function updateSliderFill(el) {
+        const val = el.value;
+        const min = el.min ? el.min : 0;
+        const max = el.max ? el.max : 100;
+        const percent = ((val - min) / (max - min)) * 100;
+        // Update background gradient to simulate filling bar
+        el.style.background = `linear-gradient(to right, var(--accent-color) ${percent}%, #333 ${percent}%)`;
+    }
+
+    function updateTimeFromInput(h, m, s) {
+        const total = h * 3600 + m * 60 + s;
+        if (mode === 'timer') {
+            totalTime = total;
+            remainingTime = total;
+            if (editingPresetIndex !== null && presets[editingPresetIndex]) {
+                presets[editingPresetIndex].time = totalTime;
+                renderPresets();
+            }
+        } else {
+            stopwatchTime = total;
+        }
+        updateText();
+    }
+
+    // --- DRAWING ---
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        
+        const t = mode === 'timer' ? remainingTime : stopwatchTime;
+        
+        // Calculate angles (0 to 1)
+        let hProg = (t % 43200) / 43200; // 12 hour cycle
+        let mProg = (t % 3600) / 3600;
+        let sProg = (t % 60) / 60;
+
+        // Fix for "full fill" at exact boundaries if time > 0
+        if (t > 0 && !isOvertime) {
+             if (t % 43200 === 0) hProg = 1;
+        }
+
+        // Draw Tracks
+        drawRing(centerX, centerY, radiusHours, 1, trackColor, false, widthHours);
+        drawRing(centerX, centerY, radiusMinutes, 1, trackColor, false, widthMinutes);
+        drawRing(centerX, centerY, radiusSeconds, 1, trackColor, false, widthSeconds);
+
+        // Draw Progress
+        if (mode === 'timer' && isOvertime) {
+            // In overtime, maybe show empty rings or full red rings? 
+            // For now, let's just not draw progress to indicate "Time's Up" clearly on the ring
+        } else {
+            // Outer: Hours, Middle: Minutes, Inner: Seconds
+            drawRing(centerX, centerY, radiusHours, hProg, ringColorH, true, widthHours);
+            drawRing(centerX, centerY, radiusMinutes, mProg, ringColorM, true, widthMinutes);
+            drawRing(centerX, centerY, radiusSeconds, sProg, ringColorS, true, widthSeconds);
+        }
+    }
+
+    function drawRing(x, y, r, progress, color, glow, w) {
+        if (progress <= 0) return;
+        
+        ctx.beginPath();
+        const startAngle = -Math.PI / 2;
+        const endAngle = startAngle + (Math.PI * 2 * progress);
+        
+        ctx.arc(x, y, r, startAngle, endAngle, false);
+        ctx.strokeStyle = color;
+        ctx.lineWidth = w;
+        ctx.lineCap = 'butt'; // Metro style flat edges
+        
+        if (glow) {
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = color;
+        } else {
+            ctx.shadowBlur = 0;
+        }
+        
+        ctx.stroke();
+        ctx.shadowBlur = 0;
+    }
+
+    // --- INTERACTION (DRAG TO SET TIME) ---
+    let isDragging = false;
+    let dragTarget = null; // 'h', 'm', 's'
+
+    function getDragTarget(x, y) {
+        const dx = x - centerX;
+        const dy = y - centerY;
+        const dist = Math.sqrt(dx*dx + dy*dy);
+        const halfW = 25; // Fixed tolerance for hit detection
+
+        if (Math.abs(dist - radiusSeconds) < halfW) return 's';
+        if (Math.abs(dist - radiusMinutes) < halfW) return 'm';
+        if (Math.abs(dist - radiusHours) < halfW) return 'h';
+        return null;
+    }
+
+    function handleInput(x, y) {
+        const dx = x - centerX;
+        const dy = y - centerY;
+        let angle = Math.atan2(dy, dx) + Math.PI / 2; // Normalize to top 0
+        if (angle < 0) angle += Math.PI * 2;
+        
+        const pct = angle / (Math.PI * 2);
+        
+        let h = Math.floor(remainingTime / 3600);
+        let m = Math.floor((remainingTime % 3600) / 60);
+        let s = remainingTime % 60;
+        
+        if (dragTarget === 's') {
+            s = pct * 60;
+        } else if (dragTarget === 'm') {
+            m = pct * 60;
+        } else if (dragTarget === 'h') {
+            h = (pct * 12);
+        }
+        
+        if (mode === 'timer') {
+            totalTime = Math.floor(h) * 3600 + Math.floor(m) * 60 + s;
+            remainingTime = totalTime;
+            if (editingPresetIndex !== null && presets[editingPresetIndex]) {
+                presets[editingPresetIndex].time = totalTime;
+                renderPresets();
+            }
+        } else {
+            stopwatchTime = Math.floor(h) * 3600 + Math.floor(m) * 60 + s;
+        }
+        updateText();
+        draw();
+    }
+
+    canvas.addEventListener('mousedown', e => {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        dragTarget = getDragTarget(x, y);
+        if (dragTarget) isDragging = true;
+    });
+
+    window.addEventListener('mousemove', e => {
+        if (!isDragging) return;
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = e.clientY - rect.top;
+        handleInput(x, y);
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; dragTarget = null; });
+    
+    // Touch support
+    canvas.addEventListener('touchstart', e => {
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const x = e.touches[0].clientX - rect.left;
+        const y = e.touches[0].clientY - rect.top;
+        dragTarget = getDragTarget(x, y);
+        if (dragTarget) isDragging = true;
+    }, {passive: false});
+
+    window.addEventListener('touchmove', e => {
+        if (!isDragging) return;
+        e.preventDefault();
+        const rect = canvas.getBoundingClientRect();
+        const x = e.touches[0].clientX - rect.left;
+        const y = e.touches[0].clientY - rect.top;
+        handleInput(x, y);
+    }, {passive: false});
+
+    window.addEventListener('touchend', () => { isDragging = false; dragTarget = null; });
+
+    // --- REVEAL EFFECT ---
+    function setupRevealEffect() {
+        document.addEventListener('mousemove', (e) => {
+            const buttons = document.querySelectorAll('.metro-btn, .glow-effect');
+            buttons.forEach(btn => {
+                const rect = btn.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                btn.style.setProperty('--x', x + 'px');
+                btn.style.setProperty('--y', y + 'px');
+            });
+        });
+    }
+
+    // --- PRESETS ---
+    function addPreset(i) {
+        presets[i] = { time: 0, name: `Preset ${i+1}`, isDeleting: false };
+        editPreset(i);
+    }
+
+    function editPreset(i) {
+        if (mode !== 'timer') setMode('timer');
+        editingPresetIndex = i;
+        totalTime = presets[i].time;
+        remainingTime = totalTime;
+        updateText();
+        draw();
+        renderPresets();
+    }
+
+    function startPreset(i) {
+        if (mode !== 'timer') setMode('timer');
+        editingPresetIndex = null;
+        totalTime = presets[i].time;
+        remainingTime = totalTime;
+        updateText();
+        draw();
+        renderPresets();
+        toggleTimer();
+    }
+
+    function deletePreset(i) {
+        // Reset any other preset that might be in deleting state
+        presets.forEach((p, index) => {
+            if (p && index !== i) p.isDeleting = false;
+        });
+
+        presets[i].isDeleting = true;
+        renderPresets();
+    }
+
+    function confirmDelete(i) {
+        presets[i] = null;
+        if (editingPresetIndex === i) editingPresetIndex = null;
+        renderPresets();
+    }
+
+    function cancelDelete(i) {
+        if (presets[i]) {
+            presets[i].isDeleting = false;
+        }
+        renderPresets();
+    }
+
+    function renamePreset(i) {
+        const newName = prompt("Enter preset name:", presets[i].name);
+        if (newName) {
+            presets[i].name = newName;
+            renderPresets();
+        }
+    }
+
+    function renderPresets() {
+        const container = document.getElementById('preset-bar');
+        container.innerHTML = '';
+        presets.forEach((p, i) => {
+            const btn = document.createElement('div');
+            btn.className = 'metro-btn preset-row';
+            if (editingPresetIndex === i) btn.classList.add('editing');
+            
+            if (p === null) {
+                btn.innerHTML = `<span style="width:100%; text-align:center;">+ Add Preset ${i+1}</span>`;
+                btn.onclick = () => addPreset(i);
+            } else {
+                btn.style.cursor = 'default';
+                const info = `<div class="preset-info"><span class="preset-name">${p.name}</span><span class="preset-time">${formatPresetTime(p.time)}</span></div>`;
+                const actions = document.createElement('div');
+                actions.className = 'preset-actions';
+                
+                const makeBtn = (txt, fn) => {
+                    const b = document.createElement('button');
+                    b.className = 'metro-btn action-btn';
+                    b.innerHTML = `<span>${txt}</span>`;
+                    b.onclick = (e) => { e.stopPropagation(); fn(); }; 
+                    return b;
+                };
+                
+                if (p.isDeleting) {
+                    actions.append(makeBtn('Confirm', ()=>confirmDelete(i)), makeBtn('Cancel', ()=>cancelDelete(i)));
+                } else {
+                    actions.append(makeBtn('Start', ()=>startPreset(i)), makeBtn('Edit', ()=>editPreset(i)), makeBtn('Del', ()=>deletePreset(i)), makeBtn('Name', ()=>renamePreset(i)));
+                }
+                btn.innerHTML = info;
+                btn.appendChild(actions);
+            }
+            container.appendChild(btn);
+        });
+    }
+
+    function formatPresetTime(s) {
+        if (s === 0) return "0s";
+        const h = Math.floor(s / 3600);
+        const m = Math.floor((s % 3600) / 60);
+        const sec = Math.floor(s % 60);
+        
+        if (h > 0) return `${h}h${pad(m)}`;
+        if (m > 0 && sec === 0) return `${m}m`;
+        if (m > 0) return `${m}:${pad(sec)}`;
+        return `${sec}s`;
+    }
+
+    // --- SETTINGS ---
+    function updateSettings() {
+        ringColorH = document.getElementById('col-ring-h').value;
+        ringColorM = document.getElementById('col-ring-m').value;
+        ringColorS = document.getElementById('col-ring-s').value;
+        
+        const btnAccent = document.getElementById('col-btn-accent').value;
+        document.documentElement.style.setProperty('--accent-color', btnAccent);
+        
+        const glowColor = document.getElementById('col-glow').value;
+        document.documentElement.style.setProperty('--glow-color', glowColor);
+        
+        const r = parseInt(glowColor.substr(1,2), 16);
+        const g = parseInt(glowColor.substr(3,2), 16);
+        const b = parseInt(glowColor.substr(5,2), 16);
+        document.documentElement.style.setProperty('--border-glow', `rgba(${r}, ${g}, ${b}, 0.6)`);
+        document.documentElement.style.setProperty('--surface-glow', `rgba(${r}, ${g}, ${b}, 0.15)`);
+
+        const useGradient = document.getElementById('bg-gradient-toggle').checked;
+        const solidControls = document.getElementById('bg-solid-controls');
+        const gradControls = document.getElementById('bg-gradient-controls');
+        
+        if (useGradient) {
+            solidControls.style.display = 'none';
+            gradControls.style.display = 'flex';
+            const c1 = document.getElementById('col-bg-1').value;
+            const c2 = document.getElementById('col-bg-2').value;
+            const c3 = document.getElementById('col-bg-3').value;
+            document.body.style.background = `linear-gradient(135deg, ${c1}, ${c2}, ${c3})`;
+        } else {
+            solidControls.style.display = 'flex';
+            gradControls.style.display = 'none';
+            const bg = document.getElementById('col-bg-solid').value;
+            document.body.style.background = bg;
+            document.documentElement.style.setProperty('--bg-color', bg);
+        }
+        draw();
+    }
+
+    function initWidthControl() {
+        document.getElementById('width-val-h').innerText = Math.round(widthHours);
+        document.getElementById('width-val-m').innerText = Math.round(widthMinutes);
+        document.getElementById('width-val-s').innerText = Math.round(widthSeconds);
+        drawWidthSettings();
+        
+        let isResizing = false;
+        let resizeTarget = null;
+
+        function getResizeTarget(x, y) {
+            const dx = x - 150;
+            const dy = y - 150;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const scale = 0.6;
+            
+            if (Math.abs(dist - (radiusSeconds * scale)) < (widthSeconds * scale / 2 + 15)) return 's';
+            if (Math.abs(dist - (radiusMinutes * scale)) < (widthMinutes * scale / 2 + 15)) return 'm';
+            if (Math.abs(dist - (radiusHours * scale)) < (widthHours * scale / 2 + 15)) return 'h';
+            return null;
+        }
+
+        widthCanvas.addEventListener('mousedown', e => {
+            const rect = widthCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            resizeTarget = getResizeTarget(x, y);
+            if (resizeTarget) isResizing = true;
+        });
+
+        window.addEventListener('mousemove', e => {
+            if (!isResizing) return;
+            const rect = widthCanvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const dx = x - 150;
+            const dy = y - 150;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            const scale = 0.6;
+            
+            let r = 0;
+            if (resizeTarget === 's') r = radiusSeconds * scale;
+            else if (resizeTarget === 'm') r = radiusMinutes * scale;
+            else if (resizeTarget === 'h') r = radiusHours * scale;
+            
+            let newW = (Math.abs(dist - r) * 2) / scale;
+            if (newW < 2) newW = 2;
+            if (newW > 60) newW = 60;
+            
+            if (resizeTarget === 's') widthSeconds = newW;
+            else if (resizeTarget === 'm') widthMinutes = newW;
+            else if (resizeTarget === 'h') widthHours = newW;
+            
+            document.getElementById('width-val-h').innerText = Math.round(widthHours);
+            document.getElementById('width-val-m').innerText = Math.round(widthMinutes);
+            document.getElementById('width-val-s').innerText = Math.round(widthSeconds);
+            
+            drawWidthSettings();
+            draw();
+        });
+
+        window.addEventListener('mouseup', () => { isResizing = false; resizeTarget = null; });
+        window.addEventListener('mouseleave', () => { isResizing = false; resizeTarget = null; });
+    }
+
+    function drawWidthSettings() {
+        widthCtx.clearRect(0, 0, 300, 300);
+        const scale = 0.6;
+        const cx = 150;
+        const cy = 150;
+        
+        const drawPreview = (r, w, color) => {
+            widthCtx.beginPath();
+            widthCtx.arc(cx, cy, r * scale, 0, Math.PI * 2);
+            widthCtx.lineWidth = w * scale;
+            widthCtx.strokeStyle = color;
+            widthCtx.stroke();
+        };
+        
+        drawPreview(radiusHours, widthHours, ringColorH);
+        drawPreview(radiusMinutes, widthMinutes, ringColorM);
+        drawPreview(radiusSeconds, widthSeconds, ringColorS);
+    }
+
+    function adjustRingWidth(type, delta) {
+        let val;
+        if (type === 'h') { widthHours += delta; val = widthHours; }
+        else if (type === 'm') { widthMinutes += delta; val = widthMinutes; }
+        else if (type === 's') { widthSeconds += delta; val = widthSeconds; }
+
+        // Clamp values
+        if (val < 2) val = 2;
+        if (val > 60) val = 60;
+
+        if (type === 'h') widthHours = val;
+        else if (type === 'm') widthMinutes = val;
+        else if (type === 's') widthSeconds = val;
+
+        document.getElementById(`width-val-${type}`).innerText = Math.round(val);
+        
+        drawWidthSettings();
+        draw();
+    }
+
+    function adjustTimerMsDigits(delta) {
+        timerMsPrecision += delta;
+        if (timerMsPrecision < 0) timerMsPrecision = 0;
+        if (timerMsPrecision > 3) timerMsPrecision = 3;
+        document.getElementById('timer-ms-digits-val').innerText = timerMsPrecision;
+        updateText();
+    }
+
+    function adjustStopwatchMsDigits(delta) {
+        stopwatchMsPrecision += delta;
+        if (stopwatchMsPrecision < 0) stopwatchMsPrecision = 0;
+        if (stopwatchMsPrecision > 3) stopwatchMsPrecision = 3;
+        document.getElementById('sw-ms-digits-val').innerText = stopwatchMsPrecision;
+        updateText();
+    }
+
+    // --- ALARM ---
+    function updateAlarmSettings() {
+        alarmType = document.getElementById('alarm-select').value;
+        document.getElementById('alarm-upload-row').style.display = (alarmType === 'custom') ? 'flex' : 'none';
+    }
+
+    function handleAlarmUpload() {
+        const file = document.getElementById('alarm-file-input').files[0];
+        if (file) {
+            customAlarmURL = URL.createObjectURL(file);
+        }
+    }
+
+    function playAlarm() {
+        stopAlarm();
+        isAlarmPlaying = true;
+        
+        if (alarmType === 'default') {
+            playBeep();
+            alarmInterval = setInterval(playBeep, 1000);
+        } else {
+            let src = '';
+            if (alarmType === 'iphone') src = 'iPhone Radar Alarm_Ringtone (Apple Sound) - Sound Effect for Editing.mp3';
+            else if (alarmType === 'samsung') src = 'Samsung Ringtone - Homecoming.mp3';
+            else if (alarmType === 'custom' && customAlarmURL) src = customAlarmURL;
+            
+            if (src) {
+                alarmAudio = new Audio(src);
+                alarmAudio.loop = true;
+                alarmAudio.play().catch(e => {
+                    console.error("Audio play failed", e);
+                    // Fallback to beep if file not found or error
+                    playBeep();
+                    alarmInterval = setInterval(playBeep, 1000);
+                });
+            }
+        }
+    }
+
+    function stopAlarm() {
+        isAlarmPlaying = false;
+        if (alarmInterval) clearInterval(alarmInterval);
+        if (alarmAudio) {
+            alarmAudio.pause();
+            alarmAudio.currentTime = 0;
+            alarmAudio = null;
+        }
+    }
+
+    function playBeep() {
+        const ctx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.2);
+    }
+
+    function testAlarm() {
+        if (isAlarmPlaying) stopAlarm();
+        else playAlarm();
+    }
+
+    function sendFeedback() {
+        const text = document.getElementById('feedback-text').value;
+        if (!text) return alert("Please enter some feedback.");
+        const subject = "Metro Timer Pro Feedback";
+        const body = encodeURIComponent(text);
+        window.location.href = `mailto:klaychan.hk@gmail.com?subject=${encodeURIComponent(subject)}&body=${body}`;
+    }
+</script>
+</body>
+</html>
